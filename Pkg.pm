@@ -30,7 +30,6 @@ use Exporter;
 use File::Basename;
 use IPC::Open3;
 
-use ASoS::Dumper qw(Dumper);
 use ASoS::Alias;
 use ASoS::Constants qw(:COLORS :LEVELS :OS);
 use ASoS::Utils;

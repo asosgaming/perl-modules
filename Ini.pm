@@ -2,7 +2,6 @@ package ASoS::Ini;
  
 use strict;
  
-use ASoS::Dumper qw(Dumper);
 use ASoS::Alias;
 use ASoS::Constants qw(:COLORS :LEVELS);
 
