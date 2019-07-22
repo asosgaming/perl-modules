@@ -30,7 +30,6 @@ use Config;
 use IPC::Open3;
 use Term::ReadKey qw(GetTerminalSize);
 
-use ASoS::Alias;
 use ASoS::Utils;
 
 use Symbol 'gensym'; 
@@ -70,6 +69,11 @@ use constant {
     WHITE => "\e[38;5;15m",
 };
 
+use constant {
+    FALSE => 0,
+    TRUE => 1
+};
+
 our @ISA = qw(Exporter);
 our @EXPORT = qw();
 our @EXPORT_OK = qw(
@@ -77,7 +81,8 @@ our @EXPORT_OK = qw(
     ARCH KERNEL KERNEL_VER VIRTUAL DISTRO OS_NAME IS_VM
     PERL_VERSION PERL_REVISION PERL_SUBVERSION PERL_VERSION_FULL
     LOGLEVELS OFF FATAL ERROR WARN INFO CMD OUT DEBUG MOD_CMD MOD_OUT MOD_DEBUG
-    WIDTH HEIGHT
+    TERM_WIDTH TERM_HEIGHT
+    TRUE FALSE
     DEFAULT BLACK RED GREEN YELLOW BLUE MAGENTA CYAN LIGHTGRAY DARKGRAY LIGHTRED LIGHTGREEN LIGHTYELLOW LIGHTBLUE LIGHTMAGENTA LIGHTCYAN WHITE
 );
 our %EXPORT_TAGS = (
@@ -86,20 +91,16 @@ our %EXPORT_TAGS = (
     OS => [qw(ARCH KERNEL KERNEL_VER VIRTUAL DISTRO OS_NAME IS_VM)],
     PERL => [qw(PERL_VERSION PERL_REVISION PERL_SUBVERSION PERL_VERSION_FULL)],
     LEVELS => [qw(LOGLEVELS OFF FATAL ERROR WARN INFO CMD OUT DEBUG MOD_CMD MOD_OUT MOD_DEBUG)],
-    SIZE => [qw(WIDTH HEIGHT)],
+    SIZE => [qw(TERM_WIDTH TERM_HEIGHT)],
+    BOOL => [qw(TRUE FALSE)],
     COLORS => [qw(DEFAULT BLACK RED GREEN YELLOW BLUE MAGENTA CYAN LIGHTGRAY DARKGRAY LIGHTRED LIGHTGREEN LIGHTYELLOW LIGHTBLUE LIGHTMAGENTA LIGHTCYAN WHITE)]
 );
 
-my $log = alias("ASoS::Log");
-
 my %VALUES;
 my ($stdin, $stdout, $stderr, $pid, $width);
-my ($cols, $rows, $xpix, $ypix) = GetTerminalSize();
 
-$width = $cols - 12;
-
-sub WIDTH { return $width; }
-sub HEIGHT { return $rows; }
+sub TERM_WIDTH { my ($cols, $rows, $xpix, $ypix) = GetTerminalSize(); return $cols; }
+sub TERM_HEIGHT { my ($cols, $rows, $xpix, $ypix) = GetTerminalSize(); return $rows; }
 sub HOSTNAME { return $VALUES{'HOSTNAME'}; }
 sub DOMAIN { return $VALUES{'DOMAIN'}; }
 sub ARCH { return $VALUES{'Architecture'}; }
@@ -115,6 +116,7 @@ sub OS_NAME { return $Config{'osname'}; }
 
 sub IS_VM { return ($VALUES{'Chassis'} eq "vm") ? 1 : 0; }
 
+#TODO: change hostname to get/set
 $VALUES{'HOSTNAME'} = qx(hostname -s); chomp $VALUES{'HOSTNAME'};
 $VALUES{'DOMAIN'} = qx(hostname -f); chomp $VALUES{'DOMAIN'}; $VALUES{'DOMAIN'} =~ s/^[^\.]*\.//;
 
@@ -128,10 +130,6 @@ while( my $output = <READER> ) {
         my ($key, $value) = (trim($val[0]), trim($val[1]));
         $VALUES{$key} = $value if $key;
     }
-}
-while( my $errout = <ERROR> ) { 
-    chomp $errout;
-    $log->pid (ERROR, $pid, $errout);
 }
 
 waitpid( $pid, 0 );

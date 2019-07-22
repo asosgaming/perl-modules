@@ -1,18 +1,29 @@
-package ASoS::Ini;
+package ASoS::Cfg;
  
 use strict;
- 
-use ASoS::Alias;
+use Exporter;
+
+use ASoS::Say;
+use ASoS::Log;
 use ASoS::Constants qw(:COLORS :LEVELS);
+
+our @ISA = qw(Exporter);
+our @EXPORT = qw(%cfg);
+our @EXPORT_OK = qw(read write);
+our %EXPORT_TAGS = (
+    ALL => \@EXPORT_OK
+);
+
+our %cfg = (
+    read => \&read,
+    write => \&write
+);
 
 our $VERSION = '2.24';
 
-our $say = alias("ASoS::Say");
-our $log = alias("ASoS::Log");
-
 BEGIN {
         require 5.008001; # For the utf8 stuff.
-        $ASoS::Ini::errstr  = '';
+        $ASoS::Cfg::errstr  = '';
 }
  
 # Create an empty object.
@@ -134,8 +145,8 @@ sub write_string {
 }
  
 # Error handling.
-sub errstr { $ASoS::Ini::errstr }
-sub _error { $ASoS::Ini::errstr = $_[1]; undef }
+sub errstr { $ASoS::Cfg::errstr }
+sub _error { $ASoS::Cfg::errstr = $_[1]; undef }
  
 1;
  

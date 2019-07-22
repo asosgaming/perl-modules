@@ -29,12 +29,13 @@ use IO::Handle;
 use Exporter;
 use File::Basename;
 
-use ASoS::Alias;
+use ASoS::Say;
+use ASoS::Depend::Dumper qw(Dumper);
 use ASoS::Constants qw(:COLORS :LEVELS);
 use ASoS::Utils;
 
 our @ISA = qw(Exporter);
-our @EXPORT = qw();
+our @EXPORT = qw(%log);
 our @EXPORT_OK = qw(LOGFILE LOGLEVEL msg fatal error warn info cmd output debug);
 our %EXPORT_TAGS = (
     ALL => \@EXPORT_OK,
@@ -42,7 +43,20 @@ our %EXPORT_TAGS = (
     INFO => [qw(LOGFILE LOGLEVEL)]
 );
 
-my $say = alias("ASoS::Say");
+our %log = (
+    cmd => \&cmd,
+    debug => \&debug,
+    dump => \&dump,
+    error => \&error,
+    fatal => \&fatal,
+    info => \&info,
+    mod_dump => \&mod_dump,
+    msg => \&msg,
+    output => \&output,
+    warn => \&warn,
+    LOGFILE => \&LOGFILE,
+    LOGLEVEL => \&LOGLEVEL
+);
 
 my $LFH;
 my $LOGFILE_OPEN = 0;
@@ -176,8 +190,8 @@ sub dump {
         level => DEBUG
     }, (ref $_[0] eq ref {}) ? shift : {});
 
-    $ASoS::Dumper::Purity = 1;
-    return msg (\%args, ASoS::Dumper->Dump($_[0], $_[1]));
+    $ASoS::Depend::Dumper::Purity = 1;
+    return msg (\%args, ASoS::Depend::Dumper->Dump($_[0], $_[1]));
 }
 
 sub mod_dump {
@@ -188,17 +202,17 @@ sub mod_dump {
         level => MOD_DEBUG
     }, (ref $_[0] eq ref {}) ? shift : {});
 
-    $ASoS::Dumper::Purity = 1;
-    return msg (\%args, ASoS::Dumper->Dump($_[0], $_[1]));
+    $ASoS::Depend::Dumper::Purity = 1;
+    return msg (\%args, ASoS::Depend::Dumper->Dump($_[0], $_[1]));
 }
 
-sub end {
+sub DESTROY {
     close($LFH) if $LOGFILE_OPEN;
 }
 
 if (open($LFH, '>>', $LOGFILE)) { 
     $LOGFILE_OPEN = 1; 
-    $say->info (DEFAULT."Using log file '".WHITE.$LOGFILE.DEFAULT."'");
+    $say{info}->(DEFAULT."Using log file '".WHITE.$LOGFILE.DEFAULT."'");
 }
 
 1;

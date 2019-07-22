@@ -1,6 +1,6 @@
-package ASoS::Alias; # git description: v0.33-3-g0a61221
+package ASoS::Depend::Aliased; # git description: v0.33-3-g0a61221
 # ABSTRACT: Use shorter versions of class names.
-$ASoS::Alias::VERSION = '0.34';
+$ASoS::Depend::Aliased::VERSION = '0.34';
 require Exporter;
 @EXPORT = qw(alias prefix);
  

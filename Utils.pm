@@ -28,7 +28,7 @@ use warnings;
 use Exporter;
 
 our @ISA = qw(Exporter);
-our @EXPORT = qw(ltrim rtrim trim removeQuotes mergeHash);
+our @EXPORT = qw(ltrim rtrim trim removeQuotes mergeHash absolutePath toHash);
 
 sub ltrim { my $s = shift; return if not $s; $s =~ s/^\s+//;       return $s };
 
@@ -59,4 +59,42 @@ sub mergeHash {
 
     return %newhash;
 }
+
+sub absolutePath {
+    shift if $_[0] eq __PACKAGE__;
+
+    my $orig = $_[0];
+    my $path = dirname($orig);
+    my $file = basename($orig);
+
+    if ($path eq '.') { $path = $ENV{'PWD'}; }
+    if ($path eq '..') { $path = dirname($ENV{'PWD'}); }
+    if ($path eq '/') { $path = ""; }
+
+    #$log{mod_dump}->({caller => (caller(0))[3]}, [$orig, $path, $file], [qw(orig path file)]);
+    return $path.'/'.$file;
+}
+
+sub toHash {
+    shift if $_[0] eq __PACKAGE__;
+
+    my %hash = ();
+    my @values = ();
+    while (defined(my $arg = shift @_)) {
+        print $arg."\n";
+        if ($arg =~ /^-.*/) {
+            $arg =~ s/^-//s;
+            if (@_ > 0 and $_[0] =~ m/^-.*/) {
+                $hash{$arg} = 1;
+            } else {
+                $hash{$arg} = shift;
+                print "  ".$hash{$arg}."\n";
+            }
+        } else { push @values, $arg; }
+    }
+    $hash{values} = @values;
+
+    return %hash;
+}
+
 1;

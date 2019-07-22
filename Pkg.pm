@@ -30,28 +30,36 @@ use Exporter;
 use File::Basename;
 use IPC::Open3;
 
-use ASoS::Alias;
+use ASoS::Say;
+use ASoS::Log;
 use ASoS::Constants qw(:COLORS :LEVELS :OS);
 use ASoS::Utils;
+use ASoS::File;
 
 use Symbol 'gensym'; 
 
 our @ISA = qw(Exporter);
-our @EXPORT = qw();
-our @EXPORT_OK = qw();
+our @EXPORT = qw(%pkg);
+our @EXPORT_OK = qw(info install installed isInstalled remove search);
 our %EXPORT_TAGS = (
     ALL => \@EXPORT_OK
 );
 
-my $say = alias("ASoS::Say");
-my $log = alias("ASoS::Log");
-my $file = alias("ASoS::File");
+our %pkg = (
+    info => \&info,
+    install => \&install,
+    installed => \&installed,
+    isInstalled => \&isInstalled,
+    remove => \&remove,
+    search => \&search
+);
 
 my @FIND = ("Arch", "Version", "Release", "Size", "Repo", "From repo", "Summary", "URL", "License");
 
+#TODO: Adjust based on distro
 sub info {
     shift if $_[0] eq __PACKAGE__;
-    $log->mod_dump ({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
+    $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options
     my $newopt = {}; $newopt = shift if (ref $_[0] eq ref {});
@@ -65,8 +73,8 @@ sub info {
     
     # Set cmd and log
     $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').join(' ', @{$opt{pkgs}});
-    $log->mod_dump ({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
-    $log->msg ({level => MOD_CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
+    $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
+    $log{msg}->({level => MOD_CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
 
     my ($stdin, $stdout, $stderr, $pid);
     my @packages = ();
@@ -92,19 +100,19 @@ sub info {
     }
     while( my $errout = <ERROR> ) { 
         chomp $errout;
-        $log->msg ({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
+        $log{msg}->({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
     }
 
     waitpid( $pid, 0 );
     my $exit = $?;
 
-    $log->mod_dump ({caller => (caller(0))[3]}, [$exit, \@packages], [qw(exit *return)]);
+    $log{mod_dump}->({caller => (caller(0))[3]}, [$exit, \@packages], [qw(exit *return)]);
     return @packages;
 }
 
 sub installed {
     shift if $_[0] eq __PACKAGE__;
-    $log->mod_dump ({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
+    $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options
     my $newopt = {}; $newopt = shift if (ref $_[0] eq ref {});
@@ -118,8 +126,8 @@ sub installed {
     
     # Set cmd and log
     $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').'installed';
-    $log->mod_dump ({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
-    $log->msg ({level => MOD_CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
+    $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
+    $log{msg}->({level => MOD_CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
 
     my ($stdin, $stdout, $stderr, $pid);
     my @packages = ();
@@ -145,19 +153,19 @@ sub installed {
     }
     while( my $errout = <ERROR> ) { 
         chomp $errout;
-        $log->msg ({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
+        $log{msg}->({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
     }
 
     waitpid( $pid, 0 );
     my $exit = $?;
 
-    $log->mod_dump ({caller => (caller(0))[3]}, [$exit, \@packages], [qw(exit *return)]);
+    $log{mod_dump}->({caller => (caller(0))[3]}, [$exit, \@packages], [qw(exit *return)]);
     return @packages;
 }
 
 sub search {
     shift if $_[0] eq __PACKAGE__;
-    $log->mod_dump ({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
+    $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options
     my $newopt = {}; $newopt = shift if (ref $_[0] eq ref {});
@@ -171,8 +179,8 @@ sub search {
     
     # Set cmd and log
     $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').join(' ', @{$opt{pkgs}});
-    $log->mod_dump ({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
-    $log->msg ({level => MOD_CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
+    $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
+    $log{msg}->({level => MOD_CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
 
     my ($stdin, $stdout, $stderr, $pid);
     my @packages = ();
@@ -194,19 +202,19 @@ sub search {
     }
     while( my $errout = <ERROR> ) { 
         chomp $errout;
-        $log->msg ({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
+        $log{msg}->({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
     }
 
     waitpid( $pid, 0 );
     my $exit = $?;
 
-    $log->mod_dump ({caller => (caller(0))[3]}, [$exit, \@packages], [qw(exit *return)]);
+    $log{mod_dump}->({caller => (caller(0))[3]}, [$exit, \@packages], [qw(exit *return)]);
     return @packages;
 }
 
 sub install {
     shift if $_[0] eq __PACKAGE__;
-    $log->mod_dump ({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
+    $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options
     my $newopt = {}; $newopt = shift if (ref $_[0] eq ref {});
@@ -231,10 +239,10 @@ sub install {
 
     # Set cmd and log
     $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').join(' ', @{$opt{notinstalled}});
-    $log->mod_dump ({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
+    $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
     return 1 if not @{$opt{notinstalled}};
-    $log->msg ({level => CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
-    $say->msg ($opt{cmd});
+    $log{msg}->({level => CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
+    $say{msg}->($opt{cmd});
 
     my ($stdin, $stdout, $stderr, $pid);
     my ($t1, $t2, $t3) = ('', 'is', '');
@@ -242,7 +250,7 @@ sub install {
     if (@{$opt{installed}} > 1) { ($t1, $t2) = ('s', 'are'); }
     if (@{$opt{notinstalled}} > 1) { $t3 = 's'; }
 
-    $say->info (DEFAULT."Package$t1 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{installed}}).DEFAULT."' $t2 already installed.") if @{$opt{installed}};
+    $say{info}->(DEFAULT."Package$t1 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{installed}}).DEFAULT."' $t2 already installed.") if @{$opt{installed}};
 
     if (@{$opt{notinstalled}}) {
         $stderr = gensym();
@@ -250,23 +258,23 @@ sub install {
 
         while( my $output = <READER> ) { 
             chomp $output;
-            $log->msg ({level => OUT, app => $opt{app}, pid => $pid}, $output);
-            $say->msg ($output); 
+            $log{msg}->({level => OUT, app => $opt{app}, pid => $pid}, $output);
+            $say{msg}->($output); 
         }
         while( my $errout = <ERROR> ) { 
             chomp $errout;
-            $log->msg ({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
-            $say->msg (RED.$errout.DEFAULT); 
+            $log{msg}->({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
+            $say{msg}->(RED.$errout.DEFAULT); 
         }
 
         waitpid( $pid, 0 );
         my $exit = $?;
 
-        $log->mod_dump ({caller => (caller(0))[3]}, [$exit], [qw(exit)]);
+        $log{mod_dump}->({caller => (caller(0))[3]}, [$exit], [qw(exit)]);
         if ($exit == 0) { 
-            $say->ok (DEFAULT."Installed package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{notinstalled}}).DEFAULT."'");
+            $say{ok}->(DEFAULT."Installed package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{notinstalled}}).DEFAULT."'");
         } else { 
-            $say->failed (DEFAULT."Unable to install package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{notinstalled}}).DEFAULT."'");
+            $say{failed}->(DEFAULT."Unable to install package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{notinstalled}}).DEFAULT."'");
         }
         return ($exit == 0);
     }
@@ -276,7 +284,7 @@ sub install {
 
 sub remove {
     shift if $_[0] eq __PACKAGE__;
-    $log->mod_dump ({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
+    $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options
     my $newopt = {}; $newopt = shift if (ref $_[0] eq ref {});
@@ -301,10 +309,10 @@ sub remove {
 
     # Set cmd and log
     $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').join(' ', @{$opt{installed}});
-    $log->mod_dump ({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
+    $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
     return 1 if not @{$opt{installed}};
-    $log->msg ({level => CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
-    $say->msg ($opt{cmd});
+    $log{msg}->({level => CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
+    $say{msg}->($opt{cmd});
 
     my ($stdin, $stdout, $stderr, $pid);
     my ($t1, $t2, $t3) = ('', 'is', '');
@@ -312,7 +320,7 @@ sub remove {
     if (@{$opt{notinstalled}} > 1) { ($t1, $t2) = ('s', 'are'); }
     if (@{$opt{installed}} > 1) { $t3 = 's'; }
 
-    $say->info (DEFAULT."Package$t1 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{notinstalled}}).DEFAULT."' $t2 not installed.") if @{$opt{notinstalled}};
+    $say{info}->(DEFAULT."Package$t1 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{notinstalled}}).DEFAULT."' $t2 not installed.") if @{$opt{notinstalled}};
 
     if (@{$opt{installed}}) {
         $stderr = gensym();
@@ -320,23 +328,23 @@ sub remove {
 
         while( my $output = <READER> ) { 
             chomp $output;
-            $log->msg ({level => OUT, app => $opt{app}, pid => $pid}, $output);
-            $say->msg ($output); 
+            $log{msg}->({level => OUT, app => $opt{app}, pid => $pid}, $output);
+            $say{msg}->($output); 
         }
         while( my $errout = <ERROR> ) { 
             chomp $errout;
-            $log->msg ({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
-            $say->msg (RED.$errout.DEFAULT); 
+            $log{msg}->({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
+            $say{msg}->(RED.$errout.DEFAULT); 
         }
 
         waitpid( $pid, 0 );
         my $exit = $?;
 
-        $log->mod_dump ({caller => (caller(0))[3]}, [$exit], [qw(exit)]);
+        $log{mod_dump}->({caller => (caller(0))[3]}, [$exit], [qw(exit)]);
         if ($exit == 0) { 
-            $say->ok (DEFAULT."Removed package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{installed}}).DEFAULT."'");
+            $say{ok}->(DEFAULT."Removed package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{installed}}).DEFAULT."'");
         } else { 
-            $say->failed (DEFAULT."Unable to remove package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{installed}}).DEFAULT."'");
+            $say{failed}->(DEFAULT."Unable to remove package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{installed}}).DEFAULT."'");
         }
         return ($exit == 0);
     }
@@ -346,7 +354,7 @@ sub remove {
 
 sub isInstalled {
     shift if $_[0] eq __PACKAGE__;
-    $log->mod_dump ({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
+    $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options
     my $newopt = {}; $newopt = shift if (ref $_[0] eq ref {});
@@ -360,8 +368,8 @@ sub isInstalled {
     
     # Set cmd and log
     $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').join(' ', @{$opt{pkgs}});
-    $log->mod_dump ({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
-    $log->msg ({level => MOD_CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
+    $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
+    $log{msg}->({level => MOD_CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
 
     my ($stdin, $stdout, $stderr, $pid);
 
@@ -370,17 +378,17 @@ sub isInstalled {
 
     while( my $output = <READER> ) { 
         chomp $output;
-        $log->msg ({level => MOD_OUT, app => $opt{app}, pid => $opt{pid}}, $output);
+        $log{msg}->({level => MOD_OUT, app => $opt{app}, pid => $opt{pid}}, $output);
     }
     while( my $errout = <ERROR> ) { 
         chomp $errout;
-        $log->msg ({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
+        $log{msg}->({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
     }
 
     waitpid( $opt{pid}, 0 );
     my $exit = $?;
 
-    $log->mod_dump ({caller => (caller(0))[3]}, [$exit], [qw(exit)]);
+    $log{mod_dump}->({caller => (caller(0))[3]}, [$exit], [qw(exit)]);
     return ($exit == 0);
 }
 

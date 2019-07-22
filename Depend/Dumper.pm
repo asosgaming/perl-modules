@@ -7,7 +7,7 @@
 # Documentation at the __END__
 #
  
-package ASoS::Dumper;
+package ASoS::Depend::Dumper;
  
 BEGIN {
     $VERSION = '2.173'; # Don't forget to set version and release
@@ -32,7 +32,7 @@ BEGIN {
     # toggled on load failure.
     eval {
         require XSLoader;
-        XSLoader::load( 'ASoS::Dumper' );
+        XSLoader::load( 'ASoS::Depend::Dumper' );
         1
     }
     or $Useperl = 1;
@@ -114,7 +114,7 @@ sub new {
  
 # Packed numeric addresses take less memory. Plus pack is faster than sprintf
  
-# Most users of current versions of ASoS::Dumper will be 5.008 or later.
+# Most users of current versions of ASoS::Depend::Dumper will be 5.008 or later.
 # Anyone on 5.6.1 and 5.6.2 upgrading will be rare (particularly judging by
 # the bug reports from users on those platforms), so for the common case avoid
 # complexity, and avoid even compiling the unneeded code.
@@ -227,7 +227,7 @@ sub DESTROY {}
  
 sub Dump {
   return &Dumpxs
-    unless $ASoS::Dumper::Useperl || (ref($_[0]) && $_[0]->{useperl})
+    unless $ASoS::Depend::Dumper::Useperl || (ref($_[0]) && $_[0]->{useperl})
             # Use pure perl version on earlier releases on EBCDIC platforms
         || (! $IS_ASCII && $] lt 5.021_010);
   return &Dumpperl;
@@ -601,12 +601,12 @@ sub _dump {
 # non-OO style of earlier version
 #
 sub Dumper {
-  return ASoS::Dumper->Dump([@_]);
+  return ASoS::Depend::Dumper->Dump([@_]);
 }
  
 # compat stub
 sub DumperX {
-  return ASoS::Dumper->Dumpxs([@_], []);
+  return ASoS::Depend::Dumper->Dumpxs([@_], []);
 }
  
 #
