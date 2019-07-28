@@ -5,7 +5,7 @@ use Exporter;
 
 use ASoS::Say;
 use ASoS::Log;
-use ASoS::Constants qw(:COLORS :LEVELS);
+use ASoS::Common qw(:COLORS);
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(%cfg);

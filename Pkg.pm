@@ -32,9 +32,9 @@ use IPC::Open3;
 
 use ASoS::Say;
 use ASoS::Log;
-use ASoS::Constants qw(:COLORS :LEVELS :OS);
-use ASoS::Utils;
+use ASoS::Common qw(:COLORS :TRIM :SUB :UTILS);
 use ASoS::File;
+use ASoS::Subs;
 
 use Symbol 'gensym'; 
 
@@ -58,24 +58,13 @@ my @FIND = ("Arch", "Version", "Release", "Size", "Repo", "From repo", "Summary"
 
 #TODO: Adjust based on distro
 sub info {
-    shift if $_[0] eq __PACKAGE__;
-    $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
-    # Process options
-    my $newopt = {}; $newopt = shift if (ref $_[0] eq ref {});
-    my @values = split(' ', join(' ', @_));
-    my %opt = mergeHash ({
-        args => '',
-        app => 'yum',
-        pkgs => \@values,
-        cmd => 'yum info'
-    }, $newopt);
+    my %opt = mergeOptions ({
+        -args => 'info',
+        -app => 'yum'
+    }, toHash(@_));
     
-    # Set cmd and log
-    $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').join(' ', @{$opt{pkgs}});
-    $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
-    $log{msg}->({level => MOD_CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
-
     my ($stdin, $stdout, $stderr, $pid);
     my @packages = ();
     my $index = -1;
@@ -111,23 +100,12 @@ sub info {
 }
 
 sub installed {
-    shift if $_[0] eq __PACKAGE__;
-    $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
-    # Process options
-    my $newopt = {}; $newopt = shift if (ref $_[0] eq ref {});
-    my @values = split(' ', join(' ', @_));
-    my %opt = mergeHash ({
-        args => '',
-        app => 'yum',
-        pkgs => \@values,
-        cmd => 'yum info'
-    }, $newopt);
-    
-    # Set cmd and log
-    $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').'installed';
-    $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
-    $log{msg}->({level => MOD_CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
+     my %opt = mergeOptions ({
+        -args => 'info installed',
+        -app => 'yum'
+    }, toHash(@_));
 
     my ($stdin, $stdout, $stderr, $pid);
     my @packages = ();
@@ -164,23 +142,12 @@ sub installed {
 }
 
 sub search {
-    shift if $_[0] eq __PACKAGE__;
-    $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
-    # Process options
-    my $newopt = {}; $newopt = shift if (ref $_[0] eq ref {});
-    my @values = split(' ', join(' ', @_));
-    my %opt = mergeHash ({
-        args => '',
-        app => 'yum',
-        pkgs => \@values,
-        cmd => 'yum search'
-    }, $newopt);
-    
-    # Set cmd and log
-    $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').join(' ', @{$opt{pkgs}});
-    $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
-    $log{msg}->({level => MOD_CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
+     my %opt = mergeOptions ({
+        -args => 'search',
+        -app => 'yum'
+    }, toHash(@_));
 
     my ($stdin, $stdout, $stderr, $pid);
     my @packages = ();
@@ -212,188 +179,215 @@ sub search {
     return @packages;
 }
 
+#TODO: Add support for multiple os
 sub install {
-    shift if $_[0] eq __PACKAGE__;
-    $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
-    # Process options
-    my $newopt = {}; $newopt = shift if (ref $_[0] eq ref {});
-    my @values = split(' ', join(' ', @_));
-    my %opt = mergeHash ({
-        args => '',
-        app => 'yum',
-        pkgs => \@values,
-        cmd => 'yum install -y'
-    }, $newopt);
+    # read options and init hash with arrays
+    my %newopts = toHash(@_, -installed => [], -notinstalled => []);
+
+    # check if packages are installed and push to new arrays
+    foreach my $pkg (@{$newopts{-values}}) {
+        isInstalled($pkg) 
+            and push (@{$newopts{-installed}}, $pkg) 
+            or push (@{$newopts{-notinstalled}}, $pkg);
+    }
+
+    # merge newopts into options
+    my %opt = mergeOptions ({
+        -app => 'yum',
+        -mainargs => 'install -y',
+        -args => undef,
+        -output => 1
+    }, %newopts, -dump => 0);
+
+    # exit if nothing to install
+    if (!@{$opt{-notinstalled}}) {
+        $say{INFO}->(
+            formatString("Package%1 %3 %2 already installed", [
+                ((@{$opt{-installed}} > 1) ? 's' : ''),
+                ((@{$opt{-installed}} > 1) ? 'are' : 'is'),
+                DEFAULT."'".WHITE.join(DEFAULT."', '".WHITE, @{$opt{-installed}}).DEFAULT."'"
+            ])
+        );
+        return 1;
+    }
     
-    $opt{installed} = [];
-    $opt{notinstalled} = [];
+    # create command
+    makeCMD(\%opt, @{$opt{-notinstalled}}) or return 0;
 
-    foreach my $pkg (@{$opt{pkgs}}) {
-        if (isInstalled($pkg)) {
-            push @{ $opt{installed} }, $pkg;
-        } else {
-            push @{ $opt{notinstalled} }, $pkg;
-        }
-    }
+    # run command
+    my %output = $file{run}->(%opt, 
+        -module => 1,
+        -output => 1,
+        -success => DEFAULT."Installed package%1 %2",
+        -failed => LIGHTRED."Unable to install package%1 %3",
+        -vars => [
+                ((@{$opt{-notinstalled}} > 1) ? 's' : ''),
+                DEFAULT."'".WHITE.join(DEFAULT."', '".WHITE, @{$opt{-notinstalled}}).DEFAULT."'",
+                LIGHTRED."'".WHITE.join(LIGHTRED."', '".WHITE, @{$opt{-notinstalled}}).LIGHTRED."'"
+            ],
+        @{$opt{-values}}
+    );
 
-    # Set cmd and log
-    $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').join(' ', @{$opt{notinstalled}});
-    $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
-    return 1 if not @{$opt{notinstalled}};
-    $log{msg}->({level => CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
-    $say{msg}->($opt{cmd});
-
-    my ($stdin, $stdout, $stderr, $pid);
-    my ($t1, $t2, $t3) = ('', 'is', '');
-
-    if (@{$opt{installed}} > 1) { ($t1, $t2) = ('s', 'are'); }
-    if (@{$opt{notinstalled}} > 1) { $t3 = 's'; }
-
-    $say{info}->(DEFAULT."Package$t1 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{installed}}).DEFAULT."' $t2 already installed.") if @{$opt{installed}};
-
-    if (@{$opt{notinstalled}}) {
-        $stderr = gensym();
-        $pid = open3(\*WRITER, \*READER, \*ERROR, $opt{cmd});
-
-        while( my $output = <READER> ) { 
-            chomp $output;
-            $log{msg}->({level => OUT, app => $opt{app}, pid => $pid}, $output);
-            $say{msg}->($output); 
-        }
-        while( my $errout = <ERROR> ) { 
-            chomp $errout;
-            $log{msg}->({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
-            $say{msg}->(RED.$errout.DEFAULT); 
-        }
-
-        waitpid( $pid, 0 );
-        my $exit = $?;
-
-        $log{mod_dump}->({caller => (caller(0))[3]}, [$exit], [qw(exit)]);
-        if ($exit == 0) { 
-            $say{ok}->(DEFAULT."Installed package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{notinstalled}}).DEFAULT."'");
-        } else { 
-            $say{failed}->(DEFAULT."Unable to install package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{notinstalled}}).DEFAULT."'");
-        }
-        return ($exit == 0);
-    }
-
-    return 1;
+    return ($output{exit} == 0);
 }
 
+#TODO: Add support for multiple os
 sub remove {
-    shift if $_[0] eq __PACKAGE__;
-    $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
-    # Process options
-    my $newopt = {}; $newopt = shift if (ref $_[0] eq ref {});
-    my @values = split(' ', join(' ', @_));
-    my %opt = mergeHash ({
-        args => '',
-        app => 'yum',
-        pkgs => \@values,
-        cmd => 'yum remove -y'
-    }, $newopt);
+    # read options and init hash with arrays
+    my %newopts = toHash(@_, -installed => [], -notinstalled => []);
 
-    $opt{installed} = [];
-    $opt{notinstalled} = [];
-
-    foreach my $pkg (@{$opt{pkgs}}) {
-        if (isInstalled($pkg)) {
-            push @{ $opt{installed} }, $pkg;
-        } else {
-            push @{ $opt{notinstalled} }, $pkg;
-        }
+    # check if packages are installed and push to new arrays
+    foreach my $pkg (@{$newopts{-values}}) {
+        isInstalled($pkg) 
+            and push (@{$newopts{-installed}}, $pkg) 
+            or push (@{$newopts{-notinstalled}}, $pkg);
     }
 
-    # Set cmd and log
-    $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').join(' ', @{$opt{installed}});
-    $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
-    return 1 if not @{$opt{installed}};
-    $log{msg}->({level => CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
-    $say{msg}->($opt{cmd});
+    # merge newopts into options
+    my %opt = mergeOptions ({
+        -app => 'yum',
+        -mainargs => 'remove -y',
+        -args => undef,
+        -output => 1
+    }, %newopts, -dump => 0);
 
-    my ($stdin, $stdout, $stderr, $pid);
-    my ($t1, $t2, $t3) = ('', 'is', '');
-
-    if (@{$opt{notinstalled}} > 1) { ($t1, $t2) = ('s', 'are'); }
-    if (@{$opt{installed}} > 1) { $t3 = 's'; }
-
-    $say{info}->(DEFAULT."Package$t1 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{notinstalled}}).DEFAULT."' $t2 not installed.") if @{$opt{notinstalled}};
-
-    if (@{$opt{installed}}) {
-        $stderr = gensym();
-        $pid = open3(\*WRITER, \*READER, \*ERROR, $opt{cmd});
-
-        while( my $output = <READER> ) { 
-            chomp $output;
-            $log{msg}->({level => OUT, app => $opt{app}, pid => $pid}, $output);
-            $say{msg}->($output); 
-        }
-        while( my $errout = <ERROR> ) { 
-            chomp $errout;
-            $log{msg}->({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
-            $say{msg}->(RED.$errout.DEFAULT); 
-        }
-
-        waitpid( $pid, 0 );
-        my $exit = $?;
-
-        $log{mod_dump}->({caller => (caller(0))[3]}, [$exit], [qw(exit)]);
-        if ($exit == 0) { 
-            $say{ok}->(DEFAULT."Removed package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{installed}}).DEFAULT."'");
-        } else { 
-            $say{failed}->(DEFAULT."Unable to remove package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{installed}}).DEFAULT."'");
-        }
-        return ($exit == 0);
+    # exit if nothing to remove
+    if (!@{$opt{-installed}}) {
+        $say{INFO}->(
+            formatString("Package%1 %3 %2 not installed", [
+                ((@{$opt{-notinstalled}} > 1) ? 's' : ''),
+                ((@{$opt{-notinstalled}} > 1) ? 'are' : 'is'),
+                DEFAULT."'".WHITE.join(DEFAULT."', '".WHITE, @{$opt{-notinstalled}}).DEFAULT."'"
+            ])
+        );
+        return 1;
     }
+    
+    # create command
+    makeCMD(\%opt, @{$opt{-installed}}) or return 0;
 
-    return 1;
+    # run command
+    my %output = $file{run}->(%opt, 
+        -module => 1,
+        -output => 1,
+        -success => DEFAULT."Removed package%1 %2",
+        -failed => LIGHTRED."Unable to remove package%1 %3",
+        -vars => [
+                ((@{$opt{-installed}} > 1) ? 's' : ''),
+                DEFAULT."'".WHITE.join(DEFAULT."', '".WHITE, @{$opt{-installed}}).DEFAULT."'",
+                LIGHTRED."'".WHITE.join(LIGHTRED."', '".WHITE, @{$opt{-installed}}).LIGHTRED."'"
+            ],
+        @{$opt{-values}}
+    );
+
+    return ($output{exit} == 0);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    #  my %opt = mergeOptions ({
+    #     -args => 'remove -y',
+    #     -app => 'yum'
+    # }, toHash(@_));
+
+    # $opt{installed} = [];
+    # $opt{notinstalled} = [];
+
+    # foreach my $pkg (@{$opt{pkgs}}) {
+    #     if (isInstalled($pkg)) {
+    #         push @{ $opt{installed} }, $pkg;
+    #     } else {
+    #         push @{ $opt{notinstalled} }, $pkg;
+    #     }
+    # }
+
+    # # Set cmd and log
+    # $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').join(' ', @{$opt{installed}});
+    # $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
+    # return 1 if not @{$opt{installed}};
+    # $log{msg}->({level => CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
+    # $say{MSG}->($opt{cmd});
+
+    # my ($stdin, $stdout, $stderr, $pid);
+    # my ($t1, $t2, $t3) = ('', 'is', '');
+
+    # if (@{$opt{notinstalled}} > 1) { ($t1, $t2) = ('s', 'are'); }
+    # if (@{$opt{installed}} > 1) { $t3 = 's'; }
+
+    # $say{INFO}->(DEFAULT."Package$t1 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{notinstalled}}).DEFAULT."' $t2 not installed.") if @{$opt{notinstalled}};
+
+    # if (@{$opt{installed}}) {
+    #     $stderr = gensym();
+    #     $pid = open3(\*WRITER, \*READER, \*ERROR, $opt{cmd});
+
+    #     while( my $output = <READER> ) { 
+    #         chomp $output;
+    #         $log{msg}->({level => OUT, app => $opt{app}, pid => $pid}, $output);
+    #         $say{MSG}->($output); 
+    #     }
+    #     while( my $errout = <ERROR> ) { 
+    #         chomp $errout;
+    #         $log{msg}->({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
+    #         $say{MSG}->(RED.$errout.DEFAULT); 
+    #     }
+
+    #     waitpid( $pid, 0 );
+    #     my $exit = $?;
+
+    #     $log{mod_dump}->({caller => (caller(0))[3]}, [$exit], [qw(exit)]);
+    #     if ($exit == 0) { 
+    #         $say{OK}->(DEFAULT."Removed package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{installed}}).DEFAULT."'");
+    #     } else { 
+    #         $say{FAILED}->(DEFAULT."Unable to remove package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{installed}}).DEFAULT."'");
+    #     }
+    #     return ($exit == 0);
+    # }
+
+    # return 1;
 }
 
 sub isInstalled {
-    shift if $_[0] eq __PACKAGE__;
-    $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
-    # Process options
-    my $newopt = {}; $newopt = shift if (ref $_[0] eq ref {});
-    my @values = split(' ', join(' ', @_));
-    my %opt = mergeHash ({
-        args => '',
-        app => 'rpm',
-        pkgs => \@values,
-        cmd => 'rpm -q'
-    }, $newopt);
-    
-    # Set cmd and log
-    $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').join(' ', @{$opt{pkgs}});
-    $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
-    $log{msg}->({level => MOD_CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
+    my %opt = mergeOptions ({
+        -app => 'rpm',
+        -mainargs => '-q',
+        -args => undef,
+        -output => 0
+    }, toHash(@_), -dump => 0);
 
-    my ($stdin, $stdout, $stderr, $pid);
+    my %output = $file{run}->(%opt, 
+        -module => 1,
+        @{$opt{-values}}
+    );
 
-    $stderr = gensym();
-    $opt{pid} = open3(\*WRITER, \*READER, \*ERROR, $opt{cmd});
-
-    while( my $output = <READER> ) { 
-        chomp $output;
-        $log{msg}->({level => MOD_OUT, app => $opt{app}, pid => $opt{pid}}, $output);
-    }
-    while( my $errout = <ERROR> ) { 
-        chomp $errout;
-        $log{msg}->({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
-    }
-
-    waitpid( $opt{pid}, 0 );
-    my $exit = $?;
-
-    $log{mod_dump}->({caller => (caller(0))[3]}, [$exit], [qw(exit)]);
-    return ($exit == 0);
+    return ($output{exit} == 0);
 }
 
 sub version {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
 }
 
 1;

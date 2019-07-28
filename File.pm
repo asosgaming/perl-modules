@@ -31,8 +31,8 @@ use IPC::Open3;
 
 use ASoS::Say;
 use ASoS::Log;
-use ASoS::Constants qw(:COLORS :LEVELS);
-use ASoS::Utils;
+use ASoS::Common qw(:COLORS :SUB :UTILS);
+use ASoS::Subs;
 
 use Symbol 'gensym';
 
@@ -68,7 +68,7 @@ our %file = (
 );
 
 sub prep {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
     my $orig = $_[0];
     my $path = dirname($orig);
@@ -81,8 +81,9 @@ sub prep {
     return ($path, $file);
 }
 
+#FIXME: remove after restructure (use absolutePath sub)
 sub prepFile {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
     my $orig = $_[0];
     my $path = dirname($orig);
@@ -95,104 +96,101 @@ sub prepFile {
     return $path.'/'.$file;
 }
 
-sub prep_cmd_one {
-    shift if $_[0] eq __PACKAGE__;
-
-    my $cmd = $_[0];
-    my $arg = $_[1];
-    my @values = @{$_[2]};
-    my $dir = pop @values;
-
-    foreach my $v (@values) { $arg += ' '.$v; }
-
-    my $path1 = dirname($dir);
-    my $file1 = basename($dir);
-
-    if ($path1 eq '.') { $path1 = $ENV{'PWD'}; }
-    if ($path1 eq '/') { $path1 = ""; }
-
-    $log{mod_dump}->([$cmd, $arg, $path1, $file1], [qw(cmd arg path1 file1)]);
-    return ("$cmd $arg $path1/$file1", $arg, $path1, $file1);
-}
-
-sub prep_cmd_two {
-    shift if $_[0] eq __PACKAGE__;
-
-    my $cmd = $_[0];
-    my $arg = $_[1];
-    my @values = @{$_[2]};
-    my $dir2 = pop @values;
-    my $dir1 = pop @values;
-
-    foreach my $v (@values) { $arg += ' '.$v; }
-
-    my $path1 = dirname($dir1);
-    my $file1 = basename($dir1);
-    my $path2 = dirname($dir2);
-    my $file2 = basename($dir2);
-
-    if ($path1 eq '.') { $path1 = $ENV{'PWD'}; }
-    if ($path1 eq '/') { $path1 = ""; }
-    if ($path2 eq '.') { $path2 = $ENV{'PWD'}; }
-    if ($path2 eq '/') { $path2 = ""; }
-
-    $log{mod_dump}->([$cmd, $arg, $path1, $file1, $path2, $file2], [qw(cmd arg path1 file1 path2 file2)]);
-    return ("$cmd $arg $path1/$file1 $path2/$file2", $arg, $path1, $file1, $path2, $file2);
-}
-
 sub run {
-    shift if $_[0] eq __PACKAGE__;
-    $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
     # Process options
-    my $newopt = {}; $newopt = shift if (ref $_[0] eq ref {});
-    my @values = split(' ', join(' ', @_));
-    my %opt = mergeHash ({
-        args => '',
-        app => $newopt->{cmd},
-        cmd => undef,
-        vals => \@values,
-        success => { var1 => undef, var2 => undef, var3 => undef },
-        failed => { var1 => undef, var2 => undef, var3 => undef },
-        var => undef
-    }, $newopt);
+    my %opt = mergeOptions ({
+        -args => undef,
+        -app => undef,
+        -module => 0,
+        -output => 1
+    }, toHash(@_), -dump => 1);
 
-    # Set cmd and log
-    $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').join(' ', @{$opt{vals}});
-    $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
-    $log{msg}->({level => CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
-    $say{msg}->($opt{cmd});
+    my %ret = (stdout => [], stderr => [], exit => -1, pid => -1);
+    my $dbg = ($opt{-module} eq 1) ? 'MOD_DEBUG' : 'DEBUG';
+    my $cmd = ($opt{-module} eq 1) ? 'MOD_CMD' : 'CMD';
+    my $out = ($opt{-module} eq 1) ? 'MOD_OUT' : 'OUT';
 
-    my ($stdin, $stdout, $stderr);
-    $stderr = gensym();
+    # create command
+    makeCMD(\%opt, @{$opt{-values}}) or return 0;
 
-    $opt{pid} = open3(\*WRITER, \*READER, \*ERROR, $opt{cmd});
+    # Log command
+    $log{$cmd}->(-from => whowasi(-1), -extra => 'command', $opt{-cmd});
 
-    while( my $output = <READER> ) { 
-        chomp $output;
-        $log{msg}->({level => OUT, app => $opt{app}, pid => $opt{pid}}, $output);
-        $say{msg}->($output); 
+    # Run command
+    $ret{pid} = open3(\*WRITER, \*READER, \*ERROR, $opt{-cmd});
+
+    # Log pid
+    $log{$dbg}->(
+        -from => whowasi(-1),
+        -app => $opt{-app},
+        -extra => 'pid',
+        $ret{pid}
+    );
+
+    while( my $stdout = <READER> ) { 
+        chomp $stdout;
+        push @{$ret{stdout}}, $stdout;
+
+        # Log stdout
+        $log{$out}->(
+            -from => whowasi(-1),
+            -app => $opt{-app},
+            $stdout
+        );
+
+        $say{MSG}->($stdout) if ($opt{-output} eq 1); 
     }
-    while( my $errout = <ERROR> ) { 
-        chomp $errout;
-        $log{msg}->({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
-        $say{msg}->(RED.$errout.DEFAULT); 
+
+    while( my $stderr = <ERROR> ) { 
+        chomp $stderr;
+        push @{$ret{stderr}}, $stderr;
+
+        # Log stderr
+        $log{ERROR}->(
+            -from => whowasi(-1),
+            -app => $opt{-app},
+            $stderr
+        );
+
+        $say{MSG}->(RED.$stderr.DEFAULT) if ($opt{-output} eq 1); 
     }
 
-    waitpid( $opt{pid}, 0 );
-    my $exit = $?;
+    waitpid( $ret{pid}, 0 );
+    $ret{exit} = $?;
 
-    $log{mod_dump}->({caller => (caller(0))[3]}, [$exit], [qw(exit)]);
-    if ($exit == 0) { 
-        if ($opt{success}{string}) { $say{ok}->(sprintf $opt{success}{string}, $opt{success}{var1}, $opt{success}{var2}, $opt{success}{var3}); } else { $say{ok}->($opt{cmd}); }
-    } else { 
-        if ($opt{failed}{string}) { $say{failed}->(sprintf $opt{failed}{string}, $opt{failed}{var1}, $opt{failed}{var2}, $opt{failed}{var3}); } else { $say{failed}->($opt{cmd}); }
+    # Log exit code
+    $log{$dbg}->(
+        -from => whowasi(-1),
+        -app => $opt{-app},
+        -extra => 'exit',
+        $ret{exit}
+    );
+
+    if ($opt{-output} eq 1) {
+        if ($ret{exit} == 0) { 
+            if (defined $opt{-success}) { 
+                #TODO: check if -vars defined
+                $say{OK}->(formatString($opt{-success}, @{$opt{-vars}})); 
+            } else { 
+                $say{OK}->($opt{-cmd}); 
+            }
+        } else { 
+            if (defined $opt{-failed}) { 
+                #TODO: check if -vars defined
+                $say{FAILED}->(formatString($opt{-failed}, @{$opt{-vars}})); 
+            } else { 
+                $say{FAILED}->($opt{-cmd}); 
+            }
+        }
     }
-    return ($exit == 0);
+
+    return %ret;
 }
 
 sub mkDir {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options
@@ -225,7 +223,7 @@ sub mkDir {
 }
 
 sub rmDir {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options
@@ -258,7 +256,7 @@ sub rmDir {
 }
 
 sub copy {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options
@@ -292,7 +290,7 @@ sub copy {
 }
 
 sub move {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options
@@ -326,7 +324,7 @@ sub move {
 }
 
 sub del {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options
@@ -359,7 +357,7 @@ sub del {
 }
 
 sub touch {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options
@@ -392,7 +390,7 @@ sub touch {
 }
 
 sub backup {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
 #     $log{mod_dump}->([$_], [qw(*backup)]);
 
@@ -405,10 +403,10 @@ sub backup {
 #                 my $newfile = "$dir/$file.original$i";
 #                 if (! -e $newfile) {
 #                     if (run("mv -v $dir/$file $newfile")) {
-#                         $say{ok}->(DEFAULT."Backed up '".WHITE.$dir.'/'.$file.DEFAULT."' to '".WHITE.$newfile.DEFAULT."'"); 
+#                         $say{OK}->(DEFAULT."Backed up '".WHITE.$dir.'/'.$file.DEFAULT."' to '".WHITE.$newfile.DEFAULT."'"); 
 #                         $ret = 1 if $ret == -1;
 #                     } else { 
-#                         $say{failed}->(LIGHTRED."Could not backup '".WHITE.$dir.'/'.$file.LIGHTRED."' to '".WHITE.$newfile.LIGHTRED."'");
+#                         $say->(LIGHTRED."Could not backup '".WHITE.$dir.'/'.$file.LIGHTRED."' to '".WHITE.$newfile.LIGHTRED."'");
 #                         $ret = 0;
 #                     }
 #                     last;
@@ -417,14 +415,14 @@ sub backup {
 #         }
 #     }
 #     if ($ret == -1) { 
-#         $say{failed}->("Backup unsuccessfull"); 
+#         $say->("Backup unsuccessfull"); 
 #         $log{msg}->(ERROR, "Backup unsuccessfull");
 #     }
 #     return $ret;
 }
 
 sub create {
-    # shift if $_[0] eq __PACKAGE__;
+    # shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
     # $log{mod_dump}->([$_], [qw(*create)]);
 
@@ -434,22 +432,22 @@ sub create {
 
     #     if (-e "$dir/$file") { backup("$dir/$file"); }
     #     if (run("touch $dir/$file")) {
-    #         $say{ok}->(DEFAULT."Created '".WHITE.$dir.'/'.$file.DEFAULT."'"); 
+    #         $say{OK}->(DEFAULT."Created '".WHITE.$dir.'/'.$file.DEFAULT."'"); 
     #         $ret = 1 if $ret == -1;
     #     } else { 
-    #         $say{failed}->(LIGHTRED."Could not create '".WHITE.$dir.'/'.$file.LIGHTRED."'");
+    #         $say->(LIGHTRED."Could not create '".WHITE.$dir.'/'.$file.LIGHTRED."'");
     #         $ret = 0;
     #     }
     # }
     # if ($ret == -1) { 
-    #     $say{failed}->("Create unsuccessfull"); 
+    #     $say->("Create unsuccessfull"); 
     #     $log{msg}->(ERROR, "Create unsuccessfull");
     # }
     # return $ret;
 }
 
 sub exists {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     my $file = prepFile(shift);
@@ -472,7 +470,7 @@ sub exists {
 }
 
 sub isReadable {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     my $file = prepFile(shift);
@@ -495,7 +493,7 @@ sub isReadable {
 }
 
 sub isWriteable {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     my $file = prepFile(shift);
@@ -518,7 +516,7 @@ sub isWriteable {
 }
 
 sub isExecutable {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     my $file = prepFile(shift);
@@ -541,7 +539,7 @@ sub isExecutable {
 }
 
 sub isEmpty {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     my $file = prepFile(shift);
@@ -564,7 +562,7 @@ sub isEmpty {
 }
 
 sub isFile {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     my $file = prepFile(shift);
@@ -587,7 +585,7 @@ sub isFile {
 }
 
 sub isDir {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     my $file = prepFile(shift);
@@ -610,7 +608,7 @@ sub isDir {
 }
 
 sub isLink {
-    shift if $_[0] eq __PACKAGE__;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     my $file = prepFile(shift);
@@ -633,7 +631,7 @@ sub isLink {
 }
 
 sub append {
-    # shift if $_[0] eq __PACKAGE__;
+    # shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
     # my ($dir, $file) = &prep(shift);
 
@@ -645,7 +643,7 @@ sub append {
     #     close $fh;
     # } else {
     #     $log{msg}->(ERROR, "$!");
-    #     $say{failed}->(LIGHTRED."Could not open file '".WHITE."$dir/$file".LIGHTRED."'");
+    #     $say->(LIGHTRED."Could not open file '".WHITE."$dir/$file".LIGHTRED."'");
     #     return 0;
     # }
     # return 1;

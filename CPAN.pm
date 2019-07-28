@@ -32,8 +32,7 @@ use ASoS::Say;
 use ASoS::Log;
 use ASoS::Pkg;
 use ASoS::File;
-use ASoS::Constants qw(:OS :LEVELS :COLORS);
-use ASoS::Utils;
+use ASoS::Common qw(:COLORS :SUB);
 
 use Symbol 'gensym'; 
 
@@ -54,7 +53,8 @@ our %CPAN = (
 );
 
 sub installModule {
-    shift if $_[0] eq __PACKAGE__;
+    return;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options
@@ -65,15 +65,15 @@ sub installModule {
     }, $newopt);
 
     $file{run}->({
-        cmd => 'cpan', 
-        args => 'install',
-        success => {
+        -app => 'cpan', 
+        -args => 'install',
+        -success => {
             string => DEFAULT."Installed module%s '%s'",
             var1 => ((@values > 1) ? 's' : ''),
             var2 => WHITE.join(DEFAULT."', '".WHITE, @values).DEFAULT,
             var3 => ''
         },
-        failed => {
+        -failed => {
             string => LIGHTRED."Could not install module%s '%s'",
             var1 => ((@values > 1) ? 's' : ''),
             var2 => WHITE.join(LIGHTRED."', '".WHITE, @values).LIGHTRED,
@@ -83,7 +83,8 @@ sub installModule {
 }
 
 sub isInstalled {
-    shift if $_[0] eq __PACKAGE__;
+    return;
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
     $log{mod_dump}->({caller => (caller(0))[0], line => (caller(0))[2]}, [\@_], [(caller(0))[3]]);
 
     # Process options

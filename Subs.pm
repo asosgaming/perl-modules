@@ -1,4 +1,4 @@
-package ASoS::Prompt;
+package ASoS::Subs;
 
 ################################################################################
 # Copyright Ⓒ 2019 ASoS Gaming
@@ -27,57 +27,54 @@ use strict;
 use warnings;
 use Exporter;
 
-use ASoS::CPAN;
-use ASoS::Say;
 use ASoS::Log;
-use ASoS::Pkg;
-use ASoS::Common qw(:COLORS);
-
-$CPAN{install}->("IO::Prompter") if not $CPAN{isInstalled}->("IO::Prompter"); 
-
-use local::lib;
-use IO::Prompter;
+use ASoS::Common qw(:COLORS :SUB);
 
 our @ISA = qw(Exporter);
-our @EXPORT = qw(%prompt);
-our @EXPORT_OK = qw();
-our %EXPORT_TAGS = (
-    ALL => \@EXPORT_OK
-);
+our @EXPORT = qw(mergeOptions);
 
-our %prompt = (
-    name => \&name,
-    number => \&number,
-    string => \&string,
-    word => \&word,
-    domain => \&domain,
-    phone => \&phone,
-    path => \&path,
-    file => \&file,
-    pause => \&pause
-);
+sub mergeOptions {
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
-sub testing { print "hello";}
+    #TODO: rewrite to return a parsed hash instead of logging through here
+    #TODO: move to common.pm
+    my $in = shift;
+    my %hash = %$in;
+    my %opt = mergeHash(\%hash, @_);
 
-sub number {}
-sub string {
-    my ($value, $name) = (shift, shift);
-    $say{PROMPT}->("Enter ".$name." [".${$value}."] ");
-    ${$value} = prompt(-default => ${$value}, -stdio, @_);
-    print "\e[1A";
-    $say{OK}->(DEFAULT.ucfirst($name)." set to '".WHITE.${$value}.DEFAULT."'");
+    # remove non persistant args
+    my $dump = delete $opt{-dump} // 1;
+
+    # temporarily remove args that we dont want to show
+    my $module = delete $opt{-module} // 0;
+    my $cmd = delete $opt{-cmd} // undef;
+    my $success = delete $opt{-success} // undef;
+    my $failed = delete $opt{-failed} // undef;
+    my @vars = delete $opt{-vars} // ();
+
+    # combine args
+    my $mainargs = delete $opt{-mainargs} // '';
+    $opt{-args} = ((defined $opt{-args})
+        ? (($mainargs) ? $mainargs.' ' : '').$opt{-args}
+        : $mainargs
+    );
+
+    #TODO: move logging to each sub that needs
+    # log options if dump is requested
+    $log{MOD_DEBUG}->(
+        -options => [\%opt],
+        -indent => 0
+    ) if ($dump == '1');
+
+    # restore removed args
+    $opt{-module} = $module;
+    $opt{-cmd} = $cmd;
+    $opt{-success} = $success;
+    $opt{-failed} = $failed;
+    @{$opt{-vars}} = @vars;
+
+    return %opt;
 }
-sub word {}
-sub domain {}
-sub phone {}
-sub path {}
-sub file {
-    my ($value, $name) = (shift, shift);
-    $say{PROMPT}->("Enter ".$name." [".${$value}."] ");
-    ${$value} = prompt(-default => ${$value}, -stdio, -filenames, @_);
-    print "\e[1A";
-    $say{OK}->(DEFAULT.ucfirst($name)." set to '".WHITE.${$value}.DEFAULT."'");
-}
-sub pause {}
+
 
 1;
