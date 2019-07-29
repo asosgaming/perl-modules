@@ -5,7 +5,7 @@ use Exporter;
 
 use ASoS::Say;
 use ASoS::Log;
-use ASoS::Common qw(:COLORS);
+use ASoS::Common qw(%RESULT :COLORS);
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(%cfg);
@@ -112,7 +112,7 @@ sub write {
     print CFG $string;
     close CFG;
 
-    return 1;
+    return $RESULT{SUCCESS};
 }
  
 # Save an object to a string.

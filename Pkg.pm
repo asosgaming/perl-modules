@@ -2,25 +2,25 @@
 package ASoS::Pkg;
 
 ################################################################################
-# Copyright Ⓒ 2019 ASoS Gaming
+#* Copyright Ⓒ 2019 ASoS Gaming
 ################################################################################
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+#* Permission is hereby granted, free of charge, to any person obtaining a copy
+#* of this software and associated documentation files (the "Software"), to deal
+#* in the Software without restriction, including without limitation the rights
+#* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+#* copies of the Software, and to permit persons to whom the Software is
+#* furnished to do so, subject to the following conditions:
+#*
+#* The above copyright notice and this permission notice shall be included in all
+#* copies or substantial portions of the Software.
+#*
+#* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+#* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+#* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+#* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+#* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+#* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+#* SOFTWARE.
 ################################################################################
 
 use v5.10;
@@ -32,9 +32,9 @@ use IPC::Open3;
 
 use ASoS::Say;
 use ASoS::Log;
-use ASoS::Common qw(:COLORS :TRIM :SUB :UTILS);
+use ASoS::Common qw(%RESULT :COLORS :TRIM :MODULE :UTILS);
 use ASoS::File;
-use ASoS::Subs;
+
 
 use Symbol 'gensym'; 
 
@@ -210,11 +210,11 @@ sub install {
                 DEFAULT."'".WHITE.join(DEFAULT."', '".WHITE, @{$opt{-installed}}).DEFAULT."'"
             ])
         );
-        return 1;
+        return $RESULT{SUCCESS};
     }
     
     # create command
-    makeCMD(\%opt, @{$opt{-notinstalled}}) or return 0;
+    makeCMD(\%opt, @{$opt{-notinstalled}}) or return $RESULT{ERROR};
 
     # run command
     my %output = $file{run}->(%opt, 
@@ -264,11 +264,11 @@ sub remove {
                 DEFAULT."'".WHITE.join(DEFAULT."', '".WHITE, @{$opt{-notinstalled}}).DEFAULT."'"
             ])
         );
-        return 1;
+        return $RESULT{SUCCESS};
     }
     
     # create command
-    makeCMD(\%opt, @{$opt{-installed}}) or return 0;
+    makeCMD(\%opt, @{$opt{-installed}}) or return $RESULT{ERROR};
 
     # run command
     my %output = $file{run}->(%opt, 
@@ -285,92 +285,13 @@ sub remove {
     );
 
     return ($output{exit} == 0);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    #  my %opt = mergeOptions ({
-    #     -args => 'remove -y',
-    #     -app => 'yum'
-    # }, toHash(@_));
-
-    # $opt{installed} = [];
-    # $opt{notinstalled} = [];
-
-    # foreach my $pkg (@{$opt{pkgs}}) {
-    #     if (isInstalled($pkg)) {
-    #         push @{ $opt{installed} }, $pkg;
-    #     } else {
-    #         push @{ $opt{notinstalled} }, $pkg;
-    #     }
-    # }
-
-    # # Set cmd and log
-    # $opt{cmd} .= ' '.(($opt{args}) ? $opt{args}.' ' : '').join(' ', @{$opt{installed}});
-    # $log{mod_dump}->({caller => (caller(0))[3], line => ''}, [\%opt], [qw(opt)]);
-    # return 1 if not @{$opt{installed}};
-    # $log{msg}->({level => CMD, caller => (caller(0))[0], line => (caller(0))[2]}, $opt{cmd});
-    # $say{MSG}->($opt{cmd});
-
-    # my ($stdin, $stdout, $stderr, $pid);
-    # my ($t1, $t2, $t3) = ('', 'is', '');
-
-    # if (@{$opt{notinstalled}} > 1) { ($t1, $t2) = ('s', 'are'); }
-    # if (@{$opt{installed}} > 1) { $t3 = 's'; }
-
-    # $say{INFO}->(DEFAULT."Package$t1 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{notinstalled}}).DEFAULT."' $t2 not installed.") if @{$opt{notinstalled}};
-
-    # if (@{$opt{installed}}) {
-    #     $stderr = gensym();
-    #     $pid = open3(\*WRITER, \*READER, \*ERROR, $opt{cmd});
-
-    #     while( my $output = <READER> ) { 
-    #         chomp $output;
-    #         $log{msg}->({level => OUT, app => $opt{app}, pid => $pid}, $output);
-    #         $say{MSG}->($output); 
-    #     }
-    #     while( my $errout = <ERROR> ) { 
-    #         chomp $errout;
-    #         $log{msg}->({level => ERROR, app => $opt{app}, pid => $opt{pid}}, $errout);
-    #         $say{MSG}->(RED.$errout.DEFAULT); 
-    #     }
-
-    #     waitpid( $pid, 0 );
-    #     my $exit = $?;
-
-    #     $log{mod_dump}->({caller => (caller(0))[3]}, [$exit], [qw(exit)]);
-    #     if ($exit == 0) { 
-    #         $say{OK}->(DEFAULT."Removed package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{installed}}).DEFAULT."'");
-    #     } else { 
-    #         $say{FAILED}->(DEFAULT."Unable to remove package$t3 '".WHITE.join(DEFAULT."', '".WHITE, @{$opt{installed}}).DEFAULT."'");
-    #     }
-    #     return ($exit == 0);
-    # }
-
-    # return 1;
 }
 
+#? check if a package is installed
 sub isInstalled {
     shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
+    #^ process options
     my %opt = mergeOptions ({
         -app => 'rpm',
         -mainargs => '-q',
@@ -378,11 +299,13 @@ sub isInstalled {
         -output => 0
     }, toHash(@_), -dump => 0);
 
+    #^ run command
     my %output = $file{run}->(%opt, 
         -module => 1,
         @{$opt{-values}}
     );
 
+    #^ return true if is installed
     return ($output{exit} == 0);
 }
 

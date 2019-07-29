@@ -1,25 +1,25 @@
 package ASoS::File;
 
 ################################################################################
-# Copyright Ⓒ 2019 ASoS Gaming
+#* Copyright Ⓒ 2019 ASoS Gaming
 ################################################################################
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+#* Permission is hereby granted, free of charge, to any person obtaining a copy
+#* of this software and associated documentation files (the "Software"), to deal
+#* in the Software without restriction, including without limitation the rights
+#* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+#* copies of the Software, and to permit persons to whom the Software is
+#* furnished to do so, subject to the following conditions:
+#*
+#* The above copyright notice and this permission notice shall be included in all
+#* copies or substantial portions of the Software.
+#*
+#* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+#* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+#* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+#* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+#* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+#* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+#* SOFTWARE.
 ################################################################################
 
 use v5.10;
@@ -31,8 +31,8 @@ use IPC::Open3;
 
 use ASoS::Say;
 use ASoS::Log;
-use ASoS::Common qw(:COLORS :SUB :UTILS);
-use ASoS::Subs;
+use ASoS::Common qw(%RESULT :COLORS :MODULE :UTILS);
+
 
 use Symbol 'gensym';
 
@@ -45,6 +45,7 @@ our %EXPORT_TAGS = (
     IS => [qw(isReadable isWriteable isExecutable isEmpty isFile isDir isLink)]
 );
 
+#! file functions
 our %file = (
     run => \&run,
     mkdir => \&mkDir,
@@ -67,6 +68,7 @@ our %file = (
     Link => \&isLink
 );
 
+#FIXME: remove after restructure (use absolutePath sub)
 sub prep {
     shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
@@ -113,7 +115,7 @@ sub run {
     my $out = ($opt{-module} eq 1) ? 'MOD_OUT' : 'OUT';
 
     # create command
-    makeCMD(\%opt, @{$opt{-values}}) or return 0;
+    makeCMD(\%opt, @{$opt{-values}}) or return $RESULT{ERROR};
 
     # Log command
     $log{$cmd}->(-from => whowasi(-1), -extra => 'command', $opt{-cmd});
@@ -458,14 +460,14 @@ sub exists {
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file exists");
-        return 1; 
+        return $RESULT{SUCCESS}; 
     } else { 
         $log{msg}->({
             level => DEBUG, 
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file does not exist");
-        return 0; 
+        return $RESULT{ERROR}; 
     }
 }
 
@@ -481,14 +483,14 @@ sub isReadable {
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is readable");
-        return 1; 
+        return $RESULT{SUCCESS}; 
     } else { 
         $log{msg}->({
             level => DEBUG, 
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is not readable");
-        return 0; 
+        return $RESULT{ERROR}; 
     }
 }
 
@@ -504,14 +506,14 @@ sub isWriteable {
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is writeable");
-        return 1; 
+        return $RESULT{SUCCESS}; 
     } else { 
         $log{msg}->({
             level => DEBUG, 
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is not writeable");
-        return 0; 
+        return $RESULT{ERROR}; 
     }
 }
 
@@ -527,14 +529,14 @@ sub isExecutable {
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is executable");
-        return 1; 
+        return $RESULT{SUCCESS}; 
     } else { 
         $log{msg}->({
             level => DEBUG, 
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is not executable");
-        return 0; 
+        return $RESULT{ERROR}; 
     }
 }
 
@@ -550,14 +552,14 @@ sub isEmpty {
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is empty");
-        return 1; 
+        return $RESULT{SUCCESS}; 
     } else { 
         $log{msg}->({
             level => DEBUG, 
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is not empty");
-        return 0; 
+        return $RESULT{ERROR}; 
     }
 }
 
@@ -573,14 +575,14 @@ sub isFile {
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is a file");
-        return 1; 
+        return $RESULT{SUCCESS}; 
     } else { 
         $log{msg}->({
             level => DEBUG, 
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is not a file");
-        return 0; 
+        return $RESULT{ERROR}; 
     }
 }
 
@@ -596,14 +598,14 @@ sub isDir {
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is a directory");
-        return 1; 
+        return $RESULT{SUCCESS}; 
     } else { 
         $log{msg}->({
             level => DEBUG, 
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is not a directory");
-        return 0; 
+        return $RESULT{ERROR}; 
     }
 }
 
@@ -619,14 +621,14 @@ sub isLink {
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is a symbolic link");
-        return 1; 
+        return $RESULT{SUCCESS}; 
     } else { 
         $log{msg}->({
             level => DEBUG, 
             caller => (caller(0))[0], 
             line => (caller(0))[2]
         }, "$file is not a symbolic link");
-        return 0; 
+        return $RESULT{ERROR}; 
     }
 }
 
@@ -644,9 +646,9 @@ sub append {
     # } else {
     #     $log{msg}->(ERROR, "$!");
     #     $say->(LIGHTRED."Could not open file '".WHITE."$dir/$file".LIGHTRED."'");
-    #     return 0;
+    #     return $RESULT{ERROR};
     # }
-    # return 1;
+    # return $RESULT{SUCCESS};
 }
 
 1;
