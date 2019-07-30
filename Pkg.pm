@@ -211,6 +211,7 @@ sub install {
                 DEFAULT."'".WHITE.join(DEFAULT."', '".WHITE, @{$opt{-installed}}).DEFAULT."'"
             )
         ) if ($opt{-say});
+        
         return $RESULT{SUCCESS};
     }
     
@@ -232,6 +233,7 @@ sub install {
         @{$opt{-values}}
     );
 
+    #^ return true if successful
     return ($output{exit} == 0);
 }
 
