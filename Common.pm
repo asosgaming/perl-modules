@@ -29,13 +29,14 @@ use Exporter;
 use Config;
 use IPC::Open3;
 use Term::ReadKey qw(GetTerminalSize);
+use File::Basename;
 
 use Symbol 'gensym'; 
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw();
 our @EXPORT_OK = qw(
-    %OS %PERL %TERM %BIN %RESULT
+    %OS %PERL %TERM %BIN %RESULT %RELEASES @YUM @APT @OPT_EXCLUDE
     ltrim rtrim trim removeQuotes
     absolutePath formatString
     toHash mergeHash whoami whowasi makeCMD mergeOptions
@@ -121,20 +122,20 @@ our %RESULT = (
 );
 
 #! list of distros and releases supported
-our @RELEASES = (
-    centos => [qw(centos6 centos7)],
-    ubuntu => [qw(lucid precise trusty xenial bionic)],
-    debian => [qw(squeeze wheezy jessie stretch buster bullseye)]
+our %RELEASES = (
+    centos => qw(centos6 centos7),
+    ubuntu => qw(lucid precise trusty xenial bionic),
+    debian => qw(squeeze wheezy jessie stretch buster bullseye)
 );
 
 #! list of distros that use yum
-our @YUM = [qw(centos)];
+our @YUM = qw(centos);
 
 #! list of distros that use apt
-our @APT = [qw(ubuntu debian)];
+our @APT = qw(ubuntu debian);
 
 #! list of options to exclude from options dump
-our $OPT_EXCLUDE = [qw(-module -cmd -success -failed -vars -var -names -name)];
+our @OPT_EXCLUDE = qw(-module -cmd -success -failed -vars -var -names -name);
 
 ################################################################################
 #* Terminal subs
@@ -233,10 +234,11 @@ sub absolutePath {
 sub formatString {
     shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
-    my $string = $_[0];
-    my @array = @{$_[1]};
+    my $string = shift;
+    my @array = @_;
     my $index = 1;
 
+    #^ loop through array and insert elements into string
     while (defined(my $arg = shift @array)) {
         my $match = '%'.$index;
         $string =~ s/$match/$arg/g;
@@ -265,12 +267,11 @@ sub toHash {
         } else {
             #. not an argument
             #. so split the value on newlines and add to values array
-            my @list = split("\n", $arg);
-            foreach my $item (@list) { push @values, $item;  }
+            push @values, $_ for split("\n", $arg);
         }
     }
 
-    #. add values array to the hash
+    #^ add values array to the hash
     @{$hash{-values}} = @values;
 
     return %hash;
@@ -282,11 +283,8 @@ sub mergeHash {
     my %hash2 = @_;
     my %newhash = %$hash1;
 
-    foreach my $key (keys %hash2)
-    {
-        #. make sure key is lowercase and combine
-        $newhash{lc($key)} = $hash2{$key};
-    }
+    #^ loop through keys, making sure it's lowercase and combine
+    $newhash{lc($_)} = $hash2{$_} for keys %hash2;
 
     return %newhash;
 }
@@ -337,7 +335,7 @@ sub whowasi {
     my $level = 0;
     my @last = ();
 
-    #. loop through caller stack
+    #^ loop through caller stack
     while (my @caller = caller($level)) {
         #. break out of loop if caller has no line number
         last if ($caller[2] == 0);
@@ -352,10 +350,10 @@ sub whowasi {
         $level++;
     }
 
-    #. set return starting with origin
+    #^ set return starting with origin
     my $ret = subName($last[0]).'['.$last[2]."]";
 
-    #. add remaining
+    #^ add remaining
     my $index = 1;
     for (my $j = @values-1; $j >= $pos; $j--) {
         $ret .= '->'.subName($values[$j]) if ($index == 1);
@@ -370,33 +368,39 @@ sub whowasi {
 sub makeCMD {
     shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
-    #TODO: strip path from app/cmd
     my $opt = shift;
 
-    #. if command already exists create app name and return
+    #^ if command already exists create app name and return
     if (defined $opt->{-cmd}) {
-        ($opt->{-app} = $opt->{-cmd}) =~ s/(\w+).*/$1/ if (not defined $opt->{-app});
+        ($opt->{-app} = $opt->{-cmd}) =~ s/([^\s]+).*/$1/ if (not defined $opt->{-app});
+        $opt->{-app} = basename($opt->{-app});
         return $RESULT{SUCCESS};
     }
 
-    #. return false if app is not defined
+    #^ return false if app is not defined
     return 0 if (not defined $opt->{-app});
 
-    #. double check that app name is only a single word
-    $opt->{-app} =~ s/(\w+).*/$1/;
+    #^ double check that app name is only a single word
+    $opt->{-app} =~ s/([^\s]+).*/$1/;
 
-    #. create command
-    $opt->{-cmd} = $opt->{-app}
-        .' '
+    #^ create command
+    $opt->{-cmd} = 
+        #. add app name
+        $opt->{-app}.' '
+        #. add main args if exist
         .((defined $opt->{-mainargs}) 
             ? $opt->{-mainargs}.' ' 
             : ''
         )
+        #. add user args if exist
         .((defined $opt->{-args}) 
             ? $opt->{-args}.' ' 
             : ''
         )
+        #. add all remaining values
         .join(' ', @_);
+    #^ remove path from app name
+    $opt->{-app} = basename($opt->{-app});
 
     return $RESULT{SUCCESS};
 }
@@ -404,25 +408,11 @@ sub makeCMD {
 sub mergeOptions {
     shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
-    #TODO: rewrite to return a parsed hash instead of logging through here
     my $in = shift;
     my %hash = %$in;
+
+    #^ merge options
     my %opt = mergeHash(\%hash, @_);
-
-    #^ remove non persistant args
-    my $dump = delete $opt{-dump} // 1;
-
-
-    #IDEA: place blocked args into an array so we can easily add more if needed
-    #^ temporarily remove args that we dont want to show
-    my $module = delete $opt{-module} // 0;
-    my $cmd = delete $opt{-cmd} // undef;
-    my $success = delete $opt{-success} // undef;
-    my $failed = delete $opt{-failed} // undef;
-    my @vars = delete $opt{-vars} // ();
-    my @var = delete $opt{-var} // ();
-    my @names = delete $opt{-names} // ();
-    my @name = delete $opt{-name} // ();
 
     #^ combine args
     my $mainargs = delete $opt{-mainargs} // '';
@@ -430,23 +420,6 @@ sub mergeOptions {
         ? (($mainargs) ? $mainargs.' ' : '').$opt{-args}
         : $mainargs
     );
-
-    #TODO: move logging to each sub that needs
-    #^ log options if dump is requested
-    #-$log{MOD_DEBUG}->(
-    #-    -options => [\%opt],
-    #-    -indent => 0
-    #-) if ($dump == '1');
-
-    #^ restore removed args
-    $opt{-module} = $module;
-    $opt{-cmd} = $cmd;
-    $opt{-success} = $success;
-    $opt{-failed} = $failed;
-    @{$opt{-vars}} = @vars;
-    @{$opt{-var}} = @var;
-    @{$opt{-names}} = @names;
-    @{$opt{-name}} = @name;
 
     return %opt;
 }

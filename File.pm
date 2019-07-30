@@ -101,68 +101,80 @@ sub prepFile {
 sub run {
     shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
-    # Process options
+    #^ Process options
     my %opt = mergeOptions ({
         -args => undef,
         -app => undef,
         -module => 0,
-        -output => 1
+        -log => 1,
+        -say => 1
     }, toHash(@_), -dump => 1);
+    $log{OPTIONS}->(\%opt);
 
+    #^ init return hash
     my %ret = (stdout => [], stderr => [], exit => -1, pid => -1);
+
+    #^ set log levels based on if its from a module or main
     my $dbg = ($opt{-module} eq 1) ? 'MOD_DEBUG' : 'DEBUG';
     my $cmd = ($opt{-module} eq 1) ? 'MOD_CMD' : 'CMD';
     my $out = ($opt{-module} eq 1) ? 'MOD_OUT' : 'OUT';
 
-    # create command
+    #^ create command
     makeCMD(\%opt, @{$opt{-values}}) or return $RESULT{ERROR};
 
-    # Log command
+    #^ Log command
     $log{$cmd}->(-from => whowasi(-1), -extra => 'command', $opt{-cmd});
 
-    # Run command
+    #^ Run command
     $ret{pid} = open3(\*WRITER, \*READER, \*ERROR, $opt{-cmd});
 
-    # Log pid
+    #^ Log pid if enabled
     $log{$dbg}->(
         -from => whowasi(-1),
         -app => $opt{-app},
         -extra => 'pid',
         $ret{pid}
-    );
+    ) if ($opt{-log}); 
 
+    #^ loop through stdout
     while( my $stdout = <READER> ) { 
         chomp $stdout;
+        #. add output to return hash
         push @{$ret{stdout}}, $stdout;
 
-        # Log stdout
+        #. Log stdout if enabled
         $log{$out}->(
             -from => whowasi(-1),
             -app => $opt{-app},
             $stdout
-        );
+        ) if ($opt{-log}); 
 
-        $say{MSG}->($stdout) if ($opt{-output} eq 1); 
+        #. output stdout if enabled
+        $say{MSG}->($stdout) if ($opt{-say}); 
     }
 
+    #^ loop through stderr
     while( my $stderr = <ERROR> ) { 
         chomp $stderr;
+        #. add output to return hash
         push @{$ret{stderr}}, $stderr;
 
-        # Log stderr
+        #. Log stderr
         $log{ERROR}->(
             -from => whowasi(-1),
             -app => $opt{-app},
             $stderr
         );
 
-        $say{MSG}->(RED.$stderr.DEFAULT) if ($opt{-output} eq 1); 
+        #. output stderr if enabled
+        $say{MSG}->(RED.$stderr.DEFAULT) if ($opt{-say}); 
     }
 
+    #^ wait for pid and add return value to return hash
     waitpid( $ret{pid}, 0 );
     $ret{exit} = $?;
 
-    # Log exit code
+    #^ Log exit code
     $log{$dbg}->(
         -from => whowasi(-1),
         -app => $opt{-app},
@@ -170,21 +182,35 @@ sub run {
         $ret{exit}
     );
 
-    if ($opt{-output} eq 1) {
+    #^ if output is enabled then:
+    if ($opt{-say}) {
+        #^ output success message
         if ($ret{exit} == 0) { 
-            if (defined $opt{-success}) { 
-                #TODO: check if -vars defined
-                $say{OK}->(formatString($opt{-success}, @{$opt{-vars}})); 
-            } else { 
-                $say{OK}->($opt{-cmd}); 
-            }
-        } else { 
+            #. if success message exists
+            if (defined $opt{-success}) {
+                #. if vars exist then format message
+                if (defined $opt{-vars}) {
+                    $say{OK}->(formatString($opt{-success}, @{$opt{-vars}}));
+                }
+                #. else print the message
+                else { $say{OK}->($opt{-success}); }
+            } 
+            #. else output command
+            else { $say{OK}->($opt{-cmd}); }
+        } 
+        #^ output failed message
+        else { 
+            #. if failed message exists
             if (defined $opt{-failed}) { 
-                #TODO: check if -vars defined
-                $say{FAILED}->(formatString($opt{-failed}, @{$opt{-vars}})); 
-            } else { 
-                $say{FAILED}->($opt{-cmd}); 
-            }
+                #. if vars exist then format message
+                if (defined $opt{-vars}) {
+                    $say{FAILED}->(formatString($opt{-failed}, @{$opt{-vars}})); 
+                }
+                #. else print the message
+                else { $say{FAILED}->($opt{-failed}); }
+            } 
+            #. else output command
+            else { $say{FAILED}->($opt{-cmd}); }
         }
     }
 

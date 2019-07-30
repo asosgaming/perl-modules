@@ -54,8 +54,12 @@ my $header = sub {
     #^ return error if nothing passed to sub
     return $RESULT{ERROR} if (!@_);
 
-    #^ loop through all values
-    foreach my $line (@_) {
+    #^ process and split newlines into a new array
+    my @output = ();
+    foreach my $line (@_) { push(@output, split("\n", $line)); }
+
+    #^ loop through all output
+    foreach my $line (@output) {
         my $str = $line;
         chomp $str;
 

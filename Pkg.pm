@@ -32,7 +32,7 @@ use IPC::Open3;
 
 use ASoS::Say;
 use ASoS::Log;
-use ASoS::Common qw(%RESULT :COLORS :TRIM :MODULE :UTILS);
+use ASoS::Common qw(%RESULT %BIN :COLORS :TRIM :MODULE :UTILS);
 use ASoS::File;
 
 
@@ -183,43 +183,45 @@ sub search {
 sub install {
     shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
-    # read options and init hash with arrays
+    #^ read options and init hash with arrays
     my %newopts = toHash(@_, -installed => [], -notinstalled => []);
 
-    # check if packages are installed and push to new arrays
+    #^ check if packages are installed and push to new arrays
     foreach my $pkg (@{$newopts{-values}}) {
         isInstalled($pkg) 
             and push (@{$newopts{-installed}}, $pkg) 
             or push (@{$newopts{-notinstalled}}, $pkg);
     }
 
-    # merge newopts into options
+    #^ merge newopts into options
     my %opt = mergeOptions ({
-        -app => 'yum',
+        -app => $BIN{'yum'},
         -mainargs => 'install -y',
         -args => undef,
-        -output => 1
+        -say => 1,
+        -log => 0
     }, %newopts, -dump => 0);
 
-    # exit if nothing to install
+    #^ exit if nothing to install
     if (!@{$opt{-notinstalled}}) {
         $say{INFO}->(
-            formatString("Package%1 %3 %2 already installed", [
+            formatString("Package%1 %3 %2 already installed",
                 ((@{$opt{-installed}} > 1) ? 's' : ''),
                 ((@{$opt{-installed}} > 1) ? 'are' : 'is'),
                 DEFAULT."'".WHITE.join(DEFAULT."', '".WHITE, @{$opt{-installed}}).DEFAULT."'"
-            ])
-        );
+            )
+        ) if ($opt{-say});
         return $RESULT{SUCCESS};
     }
     
-    # create command
+    #^ create command
     makeCMD(\%opt, @{$opt{-notinstalled}}) or return $RESULT{ERROR};
 
-    # run command
+    #^ run command
     my %output = $file{run}->(%opt, 
         -module => 1,
-        -output => 1,
+        -say => $opt{-say},
+        -log => $opt{-log},
         -success => DEFAULT."Installed package%1 %2",
         -failed => LIGHTRED."Unable to install package%1 %3",
         -vars => [
@@ -234,6 +236,7 @@ sub install {
 }
 
 #TODO: Add support for multiple os
+#FIXME: modify to match install
 sub remove {
     shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
@@ -293,11 +296,13 @@ sub isInstalled {
 
     #^ process options
     my %opt = mergeOptions ({
-        -app => 'rpm',
+        -app => $BIN{'rpm'},
         -mainargs => '-q',
         -args => undef,
-        -output => 0
+        -log => 0,
+        -say => 0
     }, toHash(@_), -dump => 0);
+    $log{OPTIONS}->(\%opt);
 
     #^ run command
     my %output = $file{run}->(%opt, 

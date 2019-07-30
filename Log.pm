@@ -31,7 +31,7 @@ use File::Basename;
 
 use ASoS::Say;
 use ASoS::Depend::Dumper qw(Dumper);
-use ASoS::Common qw(%RESULT :COLORS :MODULE);
+use ASoS::Common qw(%RESULT @OPT_EXCLUDE :COLORS :MODULE);
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(%log OFF FATAL ERROR WARN INFO CMD OUT DEBUG MOD_CMD MOD_OUT MOD_DEBUG LOGFILE LOGLEVEL);
@@ -48,7 +48,7 @@ use constant {
     DEBUG => 7,
     MOD_CMD => 8,
     MOD_OUT => 9,
-    MOD_DEBUG => 10,
+    MOD_DEBUG => 10
 };
 
 #! level names for output
@@ -75,7 +75,7 @@ our %log = (
 my $LFH;
 my $LOGFILE_OPEN = 0;
 my $LOGFILE = $ENV{'HOME'} . '/' . basename($0) . '.alog';
-my $LOGLEVEL = INFO;
+my $LOGLEVEL = MOD_DEBUG;
 
 sub LOGFILE { return $LOGFILE; }
 
@@ -253,15 +253,17 @@ sub debug {
     my %opt = mergeHash ({
         -from => whowasi,
         -level => DEBUG,
-        -purity => 1,
+        -purity => 0,
         -sort => 1,
-        -indent => 2
+        -indent => 2,
+        -deparse => 0
     }, toHash(@_));
 
     #^ set dumper options
     $ASoS::Depend::Dumper::Purity = $opt{-purity};
     $ASoS::Depend::Dumper::Sortkeys = $opt{-sort};
     $ASoS::Depend::Dumper::Indent = $opt{-indent};
+    $ASoS::Depend::Dumper::Deparse = $opt{-deparse};
 
     #^ dump variable and name if set
     if (defined $opt{-var} && defined $opt{-name}) 
@@ -269,7 +271,7 @@ sub debug {
 
     #^ or dump variables and names if set
     elsif (defined $opt{-vars} && defined $opt{-names}) 
-    { return msg (%opt, ASoS::Depend::Dumper->Dump(@{$opt{-vars}}, @{$opt{-names}})); }
+    { return msg (%opt, ASoS::Depend::Dumper->Dump(\@{$opt{-vars}}, \@{$opt{-names}})); }
 
     #^ or dump variable using name VAR1 if set
     elsif (defined $opt{-var}) 
@@ -277,7 +279,7 @@ sub debug {
 
     #^ or dump variables using names of VAR{1,2,3...} if set
     elsif (defined $opt{-vars}) 
-    { return msg (%opt, ASoS::Depend::Dumper->Dump(@{$opt{-vars}})); }
+    { return msg (%opt, ASoS::Depend::Dumper->Dump(\@{$opt{-vars}})); }
 
     #^ else just log a debug message
     else { return msg (%opt, @{$opt{-values}}); }
@@ -319,29 +321,63 @@ sub mod_debug {
     my %opt = mergeHash ({
         -from => whowasi,
         -level => MOD_DEBUG,
-        -purity => 1,
+        -purity => 0,
         -sort => 1,
-        -indent => 2
+        -indent => 2,
+        -deparse => 0
     }, toHash(@_));
 
     #^ set dumper options
     $ASoS::Depend::Dumper::Purity = $opt{-purity};
     $ASoS::Depend::Dumper::Sortkeys = $opt{-sort};
     $ASoS::Depend::Dumper::Indent = $opt{-indent};
+    $ASoS::Depend::Dumper::Deparse = $opt{-deparse};
 
-    #^ dump variables and names if set
-    if (defined $opt{-vars} && defined $opt{-names}) {
-        return msg (%opt, ASoS::Depend::Dumper->Dump(\@{$opt{-vars}}, \@{$opt{-names}}));
-    }
+    #^ dump variable and name if set
+    if (defined $opt{-var} && defined $opt{-name}) 
+    { return msg (%opt, ASoS::Depend::Dumper->Dump([$opt{-var}], [$opt{-name}])); }
 
-    #^ or dump subroutine options if options set
-    elsif (defined $opt{-options}) 
+    #^ or dump variables and names if set
+    elsif (defined $opt{-vars} && defined $opt{-names}) 
+    { return msg (%opt, ASoS::Depend::Dumper->Dump(\@{$opt{-vars}}, \@{$opt{-names}})); }
+
+    #^ or dump variable using name VAR1 if set
+    elsif (defined $opt{-var}) 
+    { return msg (%opt, ASoS::Depend::Dumper->Dump([$opt{-var}])); }
+
+    #^ or dump variables using names of VAR{1,2,3...} if set
+    elsif (defined $opt{-vars}) 
+    { return msg (%opt, ASoS::Depend::Dumper->Dump(\@{$opt{-vars}})); }
+
+    #^ else just log a debug message
+    else { return msg (%opt, @{$opt{-values}}); }
+}
+
+#? module options dump
+sub mod_options {
+    shift if defined $_[0] && $_[0] eq __PACKAGE__;
+
+    #^ grab options
+    my $options = $_[0];
+    #^ set dump option
+    my $do_dump = delete $options->{-dump} // 0;
+    #^ create new hash from options
+    my %opt = %$options;
+
+    #^ remove keys that we do not want to show in dump
+    delete $opt{$_} for @OPT_EXCLUDE;
+
+    #^ set dumper options
+    $ASoS::Depend::Dumper::Purity = 0;
+    $ASoS::Depend::Dumper::Sortkeys = 1;
+    $ASoS::Depend::Dumper::Indent = 0;
+    $ASoS::Depend::Dumper::Deparse = 0;
+
+    # #^ dump subroutine options if options set
+    if ($do_dump) 
     {
-        #. get caller stack from options
-        my $from = $opt{-options}[0]{-from} && delete $opt{-options}[0]{-from};
-
         #. split dump into an array
-        my @dump = split ("\n", ASoS::Depend::Dumper->Dump(\@{$opt{-options}}));
+        my @dump = split ("\n", ASoS::Depend::Dumper->Dump([\%opt]));
         #. remove $VAR1= and closing bracket if is multiline
         if (@dump > 2) { shift @dump && pop @dump; }
 
@@ -357,18 +393,16 @@ sub mod_debug {
             $line =~ s/,\'\-/, -/g;
             #. add double quote to beginning of line or log sub will process as options
             $line =~ s/^\s\'/\"/;
+
+            return msg (
+                -level => MOD_DEBUG, 
+                -extra => 'options',
+                -app => undef,
+                -from => whowasi(),
+                $line
+            );
         }
-
-        #. log the output
-        return msg (%opt, 
-            -extra => 'options',
-            -from => whowasi(1),
-            @dump
-        );
     }
-
-    #^ else just log a debug message
-    else { return msg (%opt, @{$opt{-values}}); }
 }
 
 sub DESTROY {
