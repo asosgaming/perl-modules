@@ -60,11 +60,39 @@ my @FIND = ("Arch", "Version", "Release", "Size", "Repo", "From repo", "Summary"
 sub info {
     shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
+    #^ process options
     my %opt = mergeOptions ({
-        -args => 'info',
-        -app => 'yum'
+        -centos => {
+            -app => $BIN{'yum'},
+            -mainargs => 'info',
+        },
+        -args => undef,
+        -say => 0,
+        -log => 0
     }, toHash(@_));
     
+    #^ create command
+    makeCMD(\%opt, @{$opt{-values}}) or return $RESULT{ERROR};
+
+    #^ run command
+    my %output = $file{run}->(%opt, 
+        -module => 1,
+        -split => ' : ',   #* split lines
+        @{$opt{-values}}
+    );
+
+
+
+
+
+
+
+
+
+
+
+
+
     my ($stdin, $stdout, $stderr, $pid);
     my @packages = ();
     my $index = -1;
@@ -179,7 +207,7 @@ sub search {
     return @packages;
 }
 
-#TODO: Add support for multiple os
+#? install package(s)
 sub install {
     shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
@@ -195,8 +223,18 @@ sub install {
 
     #^ merge newopts into options
     my %opt = mergeOptions ({
-        -app => $BIN{'yum'},
-        -mainargs => 'install -y',
+        -centos => {
+            -app => $BIN{'yum'},
+            -mainargs => 'install -y',
+        },
+        -ubuntu => {
+            -app => $BIN{'apt-get'},
+            -mainargs => 'install -y',
+        },
+        -debian => {
+            -app => $BIN{'apt-get'},
+            -mainargs => 'install -y',
+        },
         -args => undef,
         -say => 1,
         -log => 0
@@ -211,7 +249,7 @@ sub install {
                 DEFAULT."'".WHITE.join(DEFAULT."', '".WHITE, @{$opt{-installed}}).DEFAULT."'"
             )
         ) if ($opt{-say});
-        
+
         return $RESULT{SUCCESS};
     }
     
@@ -237,30 +275,40 @@ sub install {
     return ($output{exit} == 0);
 }
 
-#TODO: Add support for multiple os
-#FIXME: modify to match install
+#? remove package(s)
 sub remove {
     shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
-    # read options and init hash with arrays
+    #^ read options and init hash with arrays
     my %newopts = toHash(@_, -installed => [], -notinstalled => []);
 
-    # check if packages are installed and push to new arrays
+    #^ check if packages are installed and push to new arrays
     foreach my $pkg (@{$newopts{-values}}) {
         isInstalled($pkg) 
             and push (@{$newopts{-installed}}, $pkg) 
             or push (@{$newopts{-notinstalled}}, $pkg);
     }
 
-    # merge newopts into options
+    #^ merge newopts into options
     my %opt = mergeOptions ({
-        -app => 'yum',
-        -mainargs => 'remove -y',
+        -centos => {
+            -app => $BIN{'yum'},
+            -mainargs => 'remove -y',
+        },
+        -ubuntu => {
+            -app => $BIN{'apt-get'},
+            -mainargs => 'remove -y',
+        },
+        -debian => {
+            -app => $BIN{'apt-get'},
+            -mainargs => 'remove -y',
+        },
         -args => undef,
-        -output => 1
+        -say => 1,
+        -log => 0
     }, %newopts, -dump => 0);
 
-    # exit if nothing to remove
+    #^ exit if nothing to remove
     if (!@{$opt{-installed}}) {
         $say{INFO}->(
             formatString("Package%1 %3 %2 not installed", [
@@ -268,17 +316,19 @@ sub remove {
                 ((@{$opt{-notinstalled}} > 1) ? 'are' : 'is'),
                 DEFAULT."'".WHITE.join(DEFAULT."', '".WHITE, @{$opt{-notinstalled}}).DEFAULT."'"
             ])
-        );
+        ) if ($opt{-say});
+
         return $RESULT{SUCCESS};
     }
     
-    # create command
+    #^ create command
     makeCMD(\%opt, @{$opt{-installed}}) or return $RESULT{ERROR};
 
-    # run command
+    #^ run command
     my %output = $file{run}->(%opt, 
         -module => 1,
-        -output => 1,
+        -say => $opt{-say},
+        -log => $opt{-log},
         -success => DEFAULT."Removed package%1 %2",
         -failed => LIGHTRED."Unable to remove package%1 %3",
         -vars => [
@@ -289,6 +339,7 @@ sub remove {
         @{$opt{-values}}
     );
 
+    #^ return true if successful
     return ($output{exit} == 0);
 }
 

@@ -123,19 +123,20 @@ our %RESULT = (
 
 #! list of distros and releases supported
 our %RELEASES = (
-    centos => qw(centos6 centos7),
-    ubuntu => qw(lucid precise trusty xenial bionic),
-    debian => qw(squeeze wheezy jessie stretch buster bullseye)
+    -centos => ['-centos6', '-centos7'],
+    -ubuntu => ['-lucid', '-precise', '-trusty', '-xenial', '-bionic'],
+    -debian => ['-squeeze', '-wheezy', '-jessie', '-stretch', '-buster', '-bullseye']
 );
+#TODO: create function that loops and returns rel name when codename is passed
 
 #! list of distros that use yum
-our @YUM = qw(centos);
+our @YUM = ['centos'];
 
 #! list of distros that use apt
-our @APT = qw(ubuntu debian);
+our @APT = ['ubuntu', 'debian'];
 
 #! list of options to exclude from options dump
-our @OPT_EXCLUDE = qw(-module -cmd -success -failed -vars -var -names -name);
+our @OPT_EXCLUDE = ['-module', '-cmd', '-success', '-failed', '-vars', '-var', '-names', '-name'];
 
 ################################################################################
 #* Terminal subs
@@ -369,15 +370,29 @@ sub makeCMD {
     shift if defined $_[0] && $_[0] eq __PACKAGE__;
 
     my $opt = shift;
+    my @values = @_;
 
-    #^ if command already exists create app name and return
+    #^ if command already exists
     if (defined $opt->{-cmd}) {
+        #. set app as first word of command
         ($opt->{-app} = $opt->{-cmd}) =~ s/([^\s]+).*/$1/ if (not defined $opt->{-app});
+        #. remove path from app name
         $opt->{-app} = basename($opt->{-app});
+        #. done
         return $RESULT{SUCCESS};
     }
 
-    #^ return false if app is not defined
+    #^ check if app name exists
+    if (not defined $opt->{-app}) {
+        #. we can't do anything if there are no values, so return as error
+        return $RESULT{ERROR} if (! @values);
+        #. set app name
+        ($opt->{-app} = $values[0]) =~ s/([^\s]+).*/$1/;
+        #. remove from values
+        $values[0] =~ s/([^\s]+)//;
+    }
+
+    #^ return false if app is still not defined
     return 0 if (not defined $opt->{-app});
 
     #^ double check that app name is only a single word
@@ -398,7 +413,7 @@ sub makeCMD {
             : ''
         )
         #. add all remaining values
-        .join(' ', @_);
+        .join(' ', @values);
     #^ remove path from app name
     $opt->{-app} = basename($opt->{-app});
 
@@ -414,6 +429,31 @@ sub mergeOptions {
     #^ merge options
     my %opt = mergeHash(\%hash, @_);
 
+    #^ loop through option keys
+    while (my ($key, $value) = each (%opt)) {
+        #. check if key is a distro
+        if (defined $RELEASES{$key}) {
+            #. merge options into main options if OS id matches current
+            %opt = mergeHash(\%opt, %{$opt{$key}}) if ($key eq '-'.$OS{ID});
+            #. delete the key
+            delete $opt{$key};
+        }
+    }
+    
+    #^ loop through option keys
+    while (my ($key, $value) = each (%opt)) {
+        #. loop through all releases
+        while (my ($dist, @codenames) = each (%RELEASES)) {
+            #. check if key exists in codenames of release
+            if ($key ~~ @codenames) {
+                #. merge options into main options if the codename matches current
+                %opt = mergeHash(\%opt, %{$opt{$key}}) if ($key eq '-'.$OS{VERSION_CODENAME});
+                #. delete the key
+                delete $opt{$key};
+            }
+        }
+    }
+    
     #^ combine args
     my $mainargs = delete $opt{-mainargs} // '';
     $opt{-args} = ((defined $opt{-args})
@@ -476,16 +516,13 @@ sub setupOS {
         waitpid( $pid, 0 );
     }
 
-    while (my ($key, $value) = each (%Config)) {
-        $key = uc($key);
-
-        $OS{'ARCH_NAME'} = $value if ($key eq 'ARCHNAME');
-        $OS{'ARCH'} = $value if ($key eq 'MYARCHNAME');
-        $OS{'BY'} = $value if ($key eq 'CF_BY');
-        $OS{'EMAIL'} = $value if ($key eq 'CF_EMAIL');
-        $OS{'TIME'} = $value if ($key eq 'CF_TIME');
-        $OS{'TYPE'} = $value if ($key eq 'OSNAME');
-    }
+    $OS{'ARCH_NAME'} = $Config{'archname'} // '';
+    $OS{'ARCH'} = $Config{'myarchname'} // '';
+    $OS{'BY'} = $Config{'cf_by'} // '';
+    $OS{'EMAIL'} = $Config{'cf_email'} // '';
+    $OS{'TIME'} = $Config{'cf_time'} // '';
+    $OS{'TYPE'} = $Config{'osname'} // '';
+    $OS{'VERSION_CODENAME'} = $OS{'VERSION_CODENAME'} // $OS{'ID'}.$OS{'VERSION_ID'};
 }
 
 sub setupPERL {

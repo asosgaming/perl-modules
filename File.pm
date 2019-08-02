@@ -122,11 +122,16 @@ sub run {
     #^ create command
     makeCMD(\%opt, @{$opt{-values}}) or return $RESULT{ERROR};
 
+    #TODO: better checking of command, make sure it's executable
+    
+    #^ return if no command
+    return $RESULT{ERROR} if (! $opt{-cmd});
+
     #^ Log command
     $log{$cmd}->(-from => whowasi(-1), -extra => 'command', $opt{-cmd});
 
     #^ Run command
-    $ret{pid} = open3(\*WRITER, \*READER, \*ERROR, $opt{-cmd});
+    $ret{pid} = open3(\*WRITER, \*READER, \*ERROR, $opt{-cmd}) or return $RESULT{FATAL};
 
     #^ Log pid if enabled
     $log{$dbg}->(
