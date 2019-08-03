@@ -32,7 +32,7 @@ use IPC::Open3;
 
 use ASoS::Say;
 use ASoS::Log;
-use ASoS::Common qw(%RESULT %BIN :COLORS :TRIM :MODULE :UTILS);
+use ASoS::Common qw(%RESULT %BIN %OUTPUT :COLORS :TRIM :MODULE :UTILS);
 use ASoS::File;
 
 
@@ -75,7 +75,7 @@ sub info {
     makeCMD(\%opt, @{$opt{-values}}) or return $RESULT{ERROR};
 
     #^ run command
-    my %output = $file{run}->(%opt, 
+    $file{run}->(%opt, 
         -module => 1,
         -split => ' : ',   #* split lines
         @{$opt{-values}}
@@ -257,7 +257,7 @@ sub install {
     makeCMD(\%opt, @{$opt{-notinstalled}}) or return $RESULT{ERROR};
 
     #^ run command
-    my %output = $file{run}->(%opt, 
+    $file{run}->(%opt, 
         -module => 1,
         -say => $opt{-say},
         -log => $opt{-log},
@@ -269,10 +269,10 @@ sub install {
                 LIGHTRED."'".WHITE.join(LIGHTRED."', '".WHITE, @{$opt{-notinstalled}}).LIGHTRED."'"
             ],
         @{$opt{-values}}
-    );
+    ) or return $RESULT{ERROR};
 
     #^ return true if successful
-    return ($output{exit} == 0);
+    return ($OUTPUT{exit} == 0);
 }
 
 #? remove package(s)
@@ -325,7 +325,7 @@ sub remove {
     makeCMD(\%opt, @{$opt{-installed}}) or return $RESULT{ERROR};
 
     #^ run command
-    my %output = $file{run}->(%opt, 
+    $file{run}->(%opt, 
         -module => 1,
         -say => $opt{-say},
         -log => $opt{-log},
@@ -337,10 +337,10 @@ sub remove {
                 LIGHTRED."'".WHITE.join(LIGHTRED."', '".WHITE, @{$opt{-installed}}).LIGHTRED."'"
             ],
         @{$opt{-values}}
-    );
+    ) or return $RESULT{ERROR};
 
     #^ return true if successful
-    return ($output{exit} == 0);
+    return ($OUTPUT{exit} == 0);
 }
 
 #? check if a package is installed
@@ -358,13 +358,13 @@ sub isInstalled {
     $log{OPTIONS}->(\%opt);
 
     #^ run command
-    my %output = $file{run}->(%opt, 
+    $file{run}->(%opt, 
         -module => 1,
         @{$opt{-values}}
-    );
+    ) or return $RESULT{ERROR};
 
     #^ return true if is installed
-    return ($output{exit} == 0);
+    return ($OUTPUT{exit} == 0);
 }
 
 sub version {

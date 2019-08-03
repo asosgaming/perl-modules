@@ -34,9 +34,9 @@ use File::Basename;
 use Symbol 'gensym'; 
 
 our @ISA = qw(Exporter);
-our @EXPORT = qw();
+our @EXPORT = qw(%OUTPUT);
 our @EXPORT_OK = qw(
-    %OS %PERL %TERM %BIN %RESULT %RELEASES @YUM @APT @OPT_EXCLUDE
+    %OS %PERL %TERM %BIN %RESULT %RELEASES %OUTPUT @YUM @APT @OPT_EXCLUDE
     ltrim rtrim trim removeQuotes
     absolutePath formatString
     toHash mergeHash whoami whowasi makeCMD mergeOptions
@@ -127,6 +127,10 @@ our %RELEASES = (
     -ubuntu => ['-lucid', '-precise', '-trusty', '-xenial', '-bionic'],
     -debian => ['-squeeze', '-wheezy', '-jessie', '-stretch', '-buster', '-bullseye']
 );
+
+#! hash of command output
+our %OUTPUT = ();
+
 #TODO: create function that loops and returns rel name when codename is passed
 
 #! list of distros that use yum
@@ -238,6 +242,10 @@ sub formatString {
     my $string = shift;
     my @array = @_;
     my $index = 1;
+
+    foreach my $key (reverse sort keys %ENV) {
+        $string =~ s/\$$key/$ENV{$key}/g;
+    }
 
     #^ loop through array and insert elements into string
     while (defined(my $arg = shift @array)) {

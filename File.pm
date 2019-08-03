@@ -31,8 +31,7 @@ use IPC::Open3;
 
 use ASoS::Say;
 use ASoS::Log;
-use ASoS::Common qw(%RESULT :COLORS :MODULE :UTILS);
-
+use ASoS::Common qw(%RESULT %OUTPUT :COLORS :MODULE :UTILS);
 
 use Symbol 'gensym';
 
@@ -112,7 +111,7 @@ sub run {
     $log{OPTIONS}->(\%opt);
 
     #^ init return hash
-    my %ret = (stdout => [], stderr => [], exit => -1, pid => -1);
+    %OUTPUT = (stdout => [], stderr => [], exit => -1, pid => -1);
 
     #^ set log levels based on if its from a module or main
     my $dbg = ($opt{-module} eq 1) ? 'MOD_DEBUG' : 'DEBUG';
@@ -123,7 +122,7 @@ sub run {
     makeCMD(\%opt, @{$opt{-values}}) or return $RESULT{ERROR};
 
     #TODO: better checking of command, make sure it's executable
-    
+
     #^ return if no command
     return $RESULT{ERROR} if (! $opt{-cmd});
 
@@ -131,21 +130,21 @@ sub run {
     $log{$cmd}->(-from => whowasi(-1), -extra => 'command', $opt{-cmd});
 
     #^ Run command
-    $ret{pid} = open3(\*WRITER, \*READER, \*ERROR, $opt{-cmd}) or return $RESULT{FATAL};
+    $OUTPUT{pid} = open3(\*WRITER, \*READER, \*ERROR, $opt{-cmd}) or return $RESULT{FATAL};
 
     #^ Log pid if enabled
     $log{$dbg}->(
         -from => whowasi(-1),
         -app => $opt{-app},
         -extra => 'pid',
-        $ret{pid}
+        $OUTPUT{pid}
     ) if ($opt{-log}); 
 
     #^ loop through stdout
     while( my $stdout = <READER> ) { 
         chomp $stdout;
         #. add output to return hash
-        push @{$ret{stdout}}, $stdout;
+        push @{$OUTPUT{stdout}}, $stdout;
 
         #. Log stdout if enabled
         $log{$out}->(
@@ -162,7 +161,7 @@ sub run {
     while( my $stderr = <ERROR> ) { 
         chomp $stderr;
         #. add output to return hash
-        push @{$ret{stderr}}, $stderr;
+        push @{$OUTPUT{stderr}}, $stderr;
 
         #. Log stderr
         $log{ERROR}->(
@@ -176,21 +175,21 @@ sub run {
     }
 
     #^ wait for pid and add return value to return hash
-    waitpid( $ret{pid}, 0 );
-    $ret{exit} = $?;
+    waitpid( $OUTPUT{pid}, 0 );
+    $OUTPUT{exit} = $?;
 
     #^ Log exit code
     $log{$dbg}->(
         -from => whowasi(-1),
         -app => $opt{-app},
         -extra => 'exit',
-        $ret{exit}
+        $OUTPUT{exit}
     );
 
     #^ if output is enabled then:
     if ($opt{-say}) {
         #^ output success message
-        if ($ret{exit} == 0) { 
+        if ($OUTPUT{exit} == 0) { 
             #. if success message exists
             if (defined $opt{-success}) {
                 #. if vars exist then format message
@@ -219,7 +218,7 @@ sub run {
         }
     }
 
-    return %ret;
+    return ($OUTPUT{exit} == 0);
 }
 
 sub mkDir {
